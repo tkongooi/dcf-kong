@@ -311,7 +311,9 @@ export default function Home() {
         <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="flex-1">
             <h1 className="text-3xl font-bold tracking-tight text-slate-900">DCF Analysis Tool</h1>
-            <p className="text-slate-500">Intrinsic value estimation for global stocks</p>
+            <p className="text-slate-500">
+              Intrinsic value estimation for global stocks, created by <span className="font-semibold text-slate-700">Kong Ooi Tan</span>
+            </p>
           </div>
           
           <div className="flex flex-col md:flex-row items-end md:items-center gap-4">
