@@ -5,14 +5,27 @@ const yahooFinance = new YahooFinance();
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const ticker = searchParams.get('ticker');
+  const tickerParam = searchParams.get('ticker');
 
-  if (!ticker) {
+  if (!tickerParam) {
     return NextResponse.json({ error: 'Ticker is required' }, { status: 400 });
   }
 
   try {
-    const quote = await yahooFinance.quote(ticker);
+    let quote;
+    try {
+      quote = await yahooFinance.quote(tickerParam);
+    } catch (e) {
+      const searchRes = await yahooFinance.search(tickerParam);
+      const bestMatch = searchRes.quotes.find((q: any) => q.quoteType === 'EQUITY');
+      if (bestMatch && typeof bestMatch.symbol === 'string') {
+        quote = await yahooFinance.quote(bestMatch.symbol);
+      } else {
+        throw e;
+      }
+    }
+
+    const ticker = quote.symbol;
     
     // Exhaustive list of modules to find ANY financial data
     const summaryRes = await yahooFinance.quoteSummary(ticker, { 

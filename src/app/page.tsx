@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import * as Slider from "@radix-ui/react-slider";
-import { Search, Info, TrendingUp, AlertCircle, MessageSquare, Loader2, Download, Zap, MinusCircle, PlusCircle, Save, History, Trash2, ShieldAlert, BarChart3 } from "lucide-react";
+import { Search, Info, TrendingUp, AlertCircle, MessageSquare, Loader2, Download, Zap, MinusCircle, PlusCircle, Save, History, Trash2, ShieldAlert, BarChart3, Users } from "lucide-react";
 import { calculateDCF } from "@/lib/dcf";
 import { SensitivityTable } from "@/components/SensitivityTable";
 import { StockPriceChart } from "@/components/StockPriceChart";
 import { HistoricalFCFChart } from "@/components/HistoricalFCFChart";
+import { PeerComparisonTable } from "@/components/PeerComparisonTable";
 import { AuthUI } from "@/components/Auth";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { toPng } from "html-to-image";
@@ -55,6 +56,10 @@ export default function Home() {
   const [terminalGrowth, setTerminalGrowth] = useState(2);
   const [years, setYears] = useState(5);
   const [sharesOutstanding, setSharesOutstanding] = useState(0);
+
+  // Peer State
+  const [peers, setPeers] = useState<any[]>([]);
+  const [peersLoading, setPeersLoading] = useState(false);
 
   // Scenario Base Values
   const [baseParams, setBaseParams] = useState({ wacc: 10, growthRate: 5 });
@@ -178,14 +183,36 @@ export default function Home() {
   };
 
   const fetchStockData = async (activeTickerParam?: string, skipAi?: boolean) => {
-    const activeTicker = activeTickerParam || ticker;
+    let activeTicker = (activeTickerParam || ticker).trim();
     if (!activeTicker) return;
+    
     setLoading(true);
     setError("");
+    setPeers([]);
+
     try {
-      const res = await fetch(`/api/stock?ticker=${activeTicker}`);
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
+      // 1. Try direct fetch first (standard ticker path)
+      let res = await fetch(`/api/stock?ticker=${activeTicker}`);
+      let data = await res.json();
+
+      // 2. If direct fetch fails, try to resolve via AI
+      if (data.error) {
+        const resolution = await handleGeminiChat(activeTicker, "resolve-ticker");
+        
+        if (resolution && resolution.ticker && resolution.confidence === "high") {
+          activeTicker = resolution.ticker;
+          setTicker(activeTicker); 
+          
+          res = await fetch(`/api/stock?ticker=${activeTicker}`);
+          data = await res.json();
+          if (data.error) throw new Error(data.error);
+        } else if (resolution && resolution.suggestions && resolution.suggestions.length > 0) {
+          const suggestionList = resolution.suggestions.map((s: string) => `'${s}'`).join(" or ");
+          throw new Error(`Could not find an exact match for "${activeTicker}". Try searching for: ${suggestionList}`);
+        } else {
+          throw new Error(`Could not find a stock ticker for "${activeTicker}".`);
+        }
+      }
       
       setStockData(data);
       
@@ -198,7 +225,8 @@ export default function Home() {
       }
 
       if (!skipAi) {
-        handleGeminiChat(`Analyze ${data.symbol} for DCF and suggest parameters.`, "combined", data.symbol);
+        // Reduced to a single all-in-one AI call
+        handleGeminiChat(`Comprehensive research for ${data.symbol}`, "all-in-one", data.symbol);
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
@@ -208,7 +236,7 @@ export default function Home() {
     }
   };
 
-  const handleGeminiChat = async (input: string, type: "chat" | "research" | "commentary" | "combined" = "chat", overrideTicker?: string) => {
+  const handleGeminiChat = async (input: string, type: "chat" | "research" | "commentary" | "combined" | "peers" | "resolve-ticker" | "all-in-one" = "chat", overrideTicker?: string) => {
     const currentTicker = overrideTicker || ticker;
     if (!currentTicker && type !== "chat") return;
     
@@ -216,7 +244,9 @@ export default function Home() {
       setMessages(prev => [...prev, { role: "user", content: input }]);
     }
     
-    setAiLoading(true);
+    if (type === "peers" || type === "resolve-ticker" || type === "all-in-one") setPeersLoading(true);
+    else setAiLoading(true);
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -231,6 +261,85 @@ export default function Home() {
       const data = await res.json();
       
       if (data.error) throw new Error(data.error);
+
+      if (type === "all-in-one") {
+        try {
+          const jsonMatch = data.text.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const allData = JSON.parse(jsonMatch[0]);
+            
+            // 1. Handle DCF Parameters
+            if (allData.dcf) {
+              const params = allData.dcf;
+              if (params.fcf) setFcf(params.fcf);
+              if (params.wacc) {
+                setWacc(params.wacc);
+                setBaseParams(prev => ({ ...prev, wacc: params.wacc }));
+              }
+              if (params.growthRate) {
+                setGrowthRate(params.growthRate);
+                setBaseParams(prev => ({ ...prev, growthRate: params.growthRate }));
+              }
+              if (params.terminalGrowth) setTerminalGrowth(params.terminalGrowth);
+              if (params.years) setYears(params.years);
+              
+              if (params.historicalFCF && params.historicalFCF.length > 0) {
+                setStockData(prev => {
+                  if (!prev) return null;
+                  if (!prev.historicalFCF || prev.historicalFCF.length === 0) {
+                    return { ...prev, historicalFCF: params.historicalFCF };
+                  }
+                  return prev;
+                });
+              }
+            }
+
+            // 2. Handle Peers
+            if (allData.peers && Array.isArray(allData.peers)) {
+              const tickersToFetch = Array.from(new Set([currentTicker, ...allData.peers])).join(",");
+              const peersRes = await fetch(`/api/stocks?tickers=${tickersToFetch}`);
+              const peersData = await peersRes.json();
+              setPeers(peersData);
+            }
+
+            // 3. Handle Analysis/Chat
+            if (allData.analysis) {
+              setMessages(prev => [...prev, { role: "assistant", content: allData.analysis }]);
+            } else {
+              // Fallback to full text if structured analysis missing
+              setMessages(prev => [...prev, { role: "assistant", content: data.text }]);
+            }
+          }
+        } catch (e) {
+          console.error("Failed to parse all-in-one data", e);
+        }
+      }
+
+      if (type === "resolve-ticker") {
+        try {
+          const jsonMatch = data.text.match(/\{[\s\S]*\}/);
+          const resolution = JSON.parse(jsonMatch ? jsonMatch[0] : data.text);
+          return resolution;
+        } catch (e) {
+          console.error("Failed to parse resolution", e);
+          return null;
+        }
+      }
+
+      if (type === "peers") {
+        try {
+          const peerTickers = JSON.parse(data.text);
+          if (Array.isArray(peerTickers)) {
+            // Fetch metrics for peers + main stock
+            const tickersToFetch = Array.from(new Set([currentTicker, ...peerTickers])).join(",");
+            const peersRes = await fetch(`/api/stocks?tickers=${tickersToFetch}`);
+            const peersData = await peersRes.json();
+            setPeers(peersData);
+          }
+        } catch (e) {
+          console.error("Failed to parse or fetch peers", e);
+        }
+      }
 
       if (type === "combined" || type === "research") {
         const jsonMatch = data.text.match(/\{[\s\S]*\}/);
@@ -272,6 +381,7 @@ export default function Home() {
       setMessages(prev => [...prev, { role: "assistant", content: `Error: ${errorMessage}. Please ensure GEMINI_API_KEY is set in your environment.` }]);
     } finally {
       setAiLoading(false);
+      setPeersLoading(false);
       setChatInput("");
     }
   };
@@ -509,7 +619,9 @@ export default function Home() {
                 </div>
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                   <p className="text-sm font-medium text-slate-500 mb-1">Company Info</p>
-                  <h3 className="text-2xl font-bold text-slate-900 truncate">{stockData ? stockData.shortName : "No Data"}</h3>
+                  <h3 className="text-2xl font-bold text-slate-900 truncate">
+                    {stockData ? `${stockData.shortName} (${stockData.symbol})` : "No Data"}
+                  </h3>
                   <p className="text-sm text-slate-500 mt-1">{stockData?.sector ? `${stockData.sector} • ${stockData.industry}` : "Search a ticker to get started"}</p>
                 </div>
               </div>
@@ -565,9 +677,20 @@ export default function Home() {
                 <SensitivityTable fcf={fcf} sharesOutstanding={sharesOutstanding} terminalGrowth={terminalGrowth} years={years} wacc={wacc} growthRate={growthRate} currency={stockData.currency || "$"} />
               )}
 
+              {peersLoading && (
+                <div className="bg-white p-8 rounded-xl border border-slate-200 border-dashed flex flex-col items-center justify-center text-slate-400 gap-2">
+                  <Loader2 className="h-8 w-8 animate-spin opacity-20" />
+                  <p className="text-sm font-medium">Identifying and fetching industry peers...</p>
+                </div>
+              )}
+
+              {peers.length > 0 && !peersLoading && (
+                <PeerComparisonTable mainTicker={stockData?.symbol || ""} peers={peers} />
+              )}
+
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-[500px]">
                 <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-                  <h3 className="font-semibold flex items-center gap-2"><MessageSquare className="h-5 w-5 text-blue-600" /> Gemini Analysis</h3>
+                  <h3 className="font-semibold flex items-center gap-2"><MessageSquare className="h-5 w-5 text-blue-600" /> AI Chatbot</h3>
                   <span className="text-xs font-medium px-2 py-1 bg-blue-50 text-blue-600 rounded-full">{aiLoading ? "Thinking..." : "AI Assistant"}</span>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/30">
