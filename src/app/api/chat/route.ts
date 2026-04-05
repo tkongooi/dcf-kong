@@ -54,6 +54,7 @@ export async function POST(request: Request) {
           "growthRate": number (percentage for next 5 years),
           "terminalGrowth": number (percentage),
           "years": number (5 or 10),
+          "transitionYears": number (typically 5),
           "historicalFCF": [{"date": "YYYY-MM-DD", "fcf": number}],
           "reasoning": "string"
         },

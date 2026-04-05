@@ -111,6 +111,8 @@ export async function GET(request: Request) {
       priceToSales: summaryRes.summaryDetail?.priceToSalesTrailing12Months || quote.priceToSales || null,
       dividendYield: summaryRes.summaryDetail?.dividendYield ? summaryRes.summaryDetail.dividendYield * 100 : (quote.dividendYield || null),
       beta: summaryRes.summaryDetail?.beta || stats?.beta || null,
+      totalCash: finData?.totalCash ? finData.totalCash / 1e9 : (stats?.totalCash ? (stats.totalCash as any) / 1e9 : 0),
+      totalDebt: finData?.totalDebt ? finData.totalDebt / 1e9 : (stats?.totalDebt ? (stats.totalDebt as any) / 1e9 : 0),
       freeCashFlow: currentFCF,
       historicalFCF,
       sector: summaryRes.summaryProfile?.sector,

@@ -26,6 +26,8 @@ interface StockData {
   priceToSales: number | null;
   dividendYield: number | null;
   beta: number | null;
+  totalCash: number;
+  totalDebt: number;
   freeCashFlow: number | null;
   historicalFCF: { date: string; fcf: number; ocf?: number; capex?: number }[];
   sector?: string;
@@ -35,6 +37,8 @@ interface StockData {
 
 interface DCFResult {
   enterpriseValue: number;
+  equityValue: number;
+  netDebt: number;
   valuePerShare: number;
   projectedFCF: number[];
   terminalValue: number;
@@ -56,6 +60,9 @@ export default function Home() {
   const [terminalGrowth, setTerminalGrowth] = useState(2);
   const [years, setYears] = useState(5);
   const [sharesOutstanding, setSharesOutstanding] = useState(0);
+  const [transitionYears, setTransitionYears] = useState(5);
+  const [totalCash, setTotalCash] = useState(0);
+  const [totalDebt, setTotalDebt] = useState(0);
 
   // Peer State
   const [peers, setPeers] = useState<any[]>([]);
@@ -223,6 +230,8 @@ export default function Home() {
       if (data.sharesOutstanding) {
         setSharesOutstanding(data.sharesOutstanding);
       }
+      if (data.totalCash !== undefined) setTotalCash(data.totalCash);
+      if (data.totalDebt !== undefined) setTotalDebt(data.totalDebt);
 
       if (!skipAi) {
         // Reduced to a single all-in-one AI call
@@ -282,6 +291,7 @@ export default function Home() {
               }
               if (params.terminalGrowth) setTerminalGrowth(params.terminalGrowth);
               if (params.years) setYears(params.years);
+              if (params.transitionYears) setTransitionYears(params.transitionYears);
               
               if (params.historicalFCF && params.historicalFCF.length > 0) {
                 setStockData(prev => {
@@ -388,10 +398,10 @@ export default function Home() {
 
   useEffect(() => {
     if (fcf !== 0 && sharesOutstanding > 0) {
-      const result = calculateDCF(fcf, growthRate, terminalGrowth, wacc, years, sharesOutstanding);
+      const result = calculateDCF(fcf, growthRate, terminalGrowth, wacc, years, sharesOutstanding, transitionYears, totalCash, totalDebt);
       setDcfResult(result);
     }
-  }, [fcf, growthRate, terminalGrowth, wacc, years, sharesOutstanding]);
+  }, [fcf, growthRate, terminalGrowth, wacc, years, sharesOutstanding, transitionYears, totalCash, totalDebt]);
 
   if (!mounted) {
     return (
@@ -515,6 +525,16 @@ export default function Home() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Shares Outstanding (Billion)</label>
                   <input type="number" step="0.01" value={sharesOutstanding} onChange={(e) => setSharesOutstanding(Number(e.target.value))} className="w-full px-3 py-2 border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none" />
                 </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Total Cash (B)</label>
+                    <input type="number" step="0.1" value={totalCash} onChange={(e) => setTotalCash(Number(e.target.value))} className="w-full px-3 py-2 border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Total Debt (B)</label>
+                    <input type="number" step="0.1" value={totalDebt} onChange={(e) => setTotalDebt(Number(e.target.value))} className="w-full px-3 py-2 border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm" />
+                  </div>
+                </div>
               </div>
               <hr className="border-slate-100" />
               <div className="space-y-8">
@@ -550,10 +570,20 @@ export default function Home() {
                 </div>
                 <div className="space-y-4">
                   <div className="flex justify-between">
-                    <label className="text-sm font-medium text-slate-700">Projection Period (Years)</label>
+                    <label className="text-sm font-medium text-slate-700">Initial Period (Years)</label>
                     <span className="text-sm font-bold text-blue-600">{years}</span>
                   </div>
                   <Slider.Root className="relative flex items-center select-none touch-none w-full h-5" value={[years]} max={20} min={1} step={1} onValueChange={(vals) => setYears(vals[0])}>
+                    <Slider.Track className="bg-slate-200 relative grow rounded-full h-[4px]"><Slider.Range className="absolute bg-blue-500 rounded-full h-full" /></Slider.Track>
+                    <Slider.Thumb className="block w-5 h-5 bg-white shadow-lg border border-slate-200 rounded-full hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </Slider.Root>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex justify-between">
+                    <label className="text-sm font-medium text-slate-700">Transition Period (Years)</label>
+                    <span className="text-sm font-bold text-blue-600">{transitionYears}</span>
+                  </div>
+                  <Slider.Root className="relative flex items-center select-none touch-none w-full h-5" value={[transitionYears]} max={10} min={0} step={1} onValueChange={(vals) => setTransitionYears(vals[0])}>
                     <Slider.Track className="bg-slate-200 relative grow rounded-full h-[4px]"><Slider.Range className="absolute bg-blue-500 rounded-full h-full" /></Slider.Track>
                     <Slider.Thumb className="block w-5 h-5 bg-white shadow-lg border border-slate-200 rounded-full hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </Slider.Root>
