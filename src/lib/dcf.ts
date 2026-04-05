@@ -10,12 +10,14 @@ export function calculateDCF(
   totalDebt: number = 0
 ) {
   const projectedFCF = [];
+  const annualGrowthRates = [];
   let currentFCF = fcf;
 
   // 1. STAGE 1: Initial Growth Period (Years 1 to 'years')
   for (let i = 1; i <= years; i++) {
     currentFCF *= 1 + growthRate / 100;
     projectedFCF.push(currentFCF);
+    annualGrowthRates.push(growthRate);
   }
 
   // 2. STAGE 2: Transition Period (Years 'years+1' to 'years + transitionYears')
@@ -24,6 +26,7 @@ export function calculateDCF(
     const stage2Growth = growthRate - ((growthRate - terminalGrowthRate) * (i / transitionYears));
     currentFCF *= 1 + stage2Growth / 100;
     projectedFCF.push(currentFCF);
+    annualGrowthRates.push(stage2Growth);
   }
 
   // 3. STAGE 3: Terminal Value calculation at the end of the transition period
@@ -56,6 +59,7 @@ export function calculateDCF(
     netDebt,
     valuePerShare,
     projectedFCF,
+    annualGrowthRates,
     terminalValue,
     presentValue,
     presentTerminalValue,

@@ -41,6 +41,7 @@ interface DCFResult {
   netDebt: number;
   valuePerShare: number;
   projectedFCF: number[];
+  annualGrowthRates: number[];
   terminalValue: number;
   presentValue: number;
   presentTerminalValue: number;
@@ -708,7 +709,56 @@ export default function Home() {
 
               <div className="space-y-4">
                 {stockData?.historicalFCF && stockData.historicalFCF.length > 0 ? (
-                  <HistoricalFCFChart data={stockData.historicalFCF} />
+                  <div className="space-y-6">
+                    <HistoricalFCFChart 
+                      data={stockData.historicalFCF} 
+                      projections={dcfResult?.projectedFCF} 
+                      growthRates={dcfResult?.annualGrowthRates}
+                      initialYears={years}
+                    />
+                    
+                    {dcfResult && (
+                      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
+                        <h3 className="text-lg font-semibold mb-4 text-slate-900">3-Stage Growth Summary</h3>
+                        <table className="w-full text-sm border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50">
+                              <th className="p-3 text-left border-b font-medium text-slate-500">Stage</th>
+                              <th className="p-3 text-left border-b font-medium text-slate-500">Duration</th>
+                              <th className="p-3 text-left border-b font-medium text-slate-500">Avg. Growth</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td className="p-3 border-b font-bold text-slate-800 flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-[#8b5cf6]"></div> Initial Period
+                              </td>
+                              <td className="p-3 border-b text-slate-600">{years} Years</td>
+                              <td className="p-3 border-b text-slate-600 font-semibold">{growthRate.toFixed(1)}%</td>
+                            </tr>
+                            <tr>
+                              <td className="p-3 border-b font-bold text-slate-800 flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-[#d946ef]"></div> Transition Period
+                              </td>
+                              <td className="p-3 border-b text-slate-600">{transitionYears} Years</td>
+                              <td className="p-3 border-b text-slate-600 font-semibold">
+                                {transitionYears > 0 
+                                  ? ((growthRate + terminalGrowth) / 2).toFixed(1) 
+                                  : "---"}% (Declining)
+                              </td>
+                            </tr>
+                            <tr className="bg-blue-50/20">
+                              <td className="p-3 font-bold text-slate-800 flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-[#2563eb]"></div> Terminal Period
+                              </td>
+                              <td className="p-3 text-slate-600">Perpetuity</td>
+                              <td className="p-3 text-slate-600 font-semibold">{terminalGrowth.toFixed(1)}%</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
                 ) : stockData ? (
                   <div className="bg-white p-8 rounded-xl border border-slate-200 border-dashed flex flex-col items-center justify-center text-slate-400 gap-2">
                     <BarChart3 className="h-8 w-8 opacity-20" />
