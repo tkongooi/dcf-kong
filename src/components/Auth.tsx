@@ -105,7 +105,7 @@ export const AuthUI = () => {
           <div className="relative">
             <input
               type="text"
-              placeholder="Enter 6-digit code"
+              placeholder="Enter code from email"
               className="pl-8 pr-4 py-1.5 bg-white border border-green-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-green-500 w-48"
               value={otp}
               onChange={(e) => setOtp(e.target.value)}
