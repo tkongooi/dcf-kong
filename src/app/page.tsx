@@ -2,10 +2,13 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import * as Slider from "@radix-ui/react-slider";
-import { Search, Info, TrendingUp, AlertCircle, MessageSquare, Loader2, Download, Zap, MinusCircle, PlusCircle, Brain, Sparkles } from "lucide-react";
+import { Search, Info, TrendingUp, AlertCircle, MessageSquare, Loader2, Download, Zap, MinusCircle, PlusCircle, Save, History, Trash2, ShieldAlert, BarChart3 } from "lucide-react";
 import { calculateDCF } from "@/lib/dcf";
 import { SensitivityTable } from "@/components/SensitivityTable";
 import { StockPriceChart } from "@/components/StockPriceChart";
+import { HistoricalFCFChart } from "@/components/HistoricalFCFChart";
+import { AuthUI } from "@/components/Auth";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { toPng } from "html-to-image";
 import jsPDF from "jspdf";
 
@@ -23,6 +26,7 @@ interface StockData {
   dividendYield: number | null;
   beta: number | null;
   freeCashFlow: number | null;
+  historicalFCF: { date: string; fcf: number; ocf?: number; capex?: number }[];
   sector?: string;
   industry?: string;
   history: { date: string; price: number }[];
@@ -57,8 +61,12 @@ export default function Home() {
 
   const [dcfResult, setDcfResult] = useState<DCFResult | null>(null);
 
+  // Auth & Saved Data
+  const [user, setUser] = useState<any>(null);
+  const [savedAnalyses, setSavedAnalyses] = useState<any[]>([]);
+  const [saveLoading, setSaveLoading] = useState(false);
+
   // AI State
-  const [aiModel, setAiModel] = useState<"flash" | "pro">("flash");
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([
     { role: "assistant", content: "Hello! Search for a stock ticker to start our analysis. I can help you research initial DCF parameters and discuss the company's fundamentals." }
   ]);
@@ -68,7 +76,70 @@ export default function Home() {
 
   useEffect(() => {
     setMounted(true);
+    if (isSupabaseConfigured) {
+      supabase.auth.getUser().then(({ data: { user } }) => setUser(user));
+      supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
+    }
   }, []);
+
+  useEffect(() => {
+    if (user && isSupabaseConfigured) fetchSavedAnalyses();
+    else setSavedAnalyses([]);
+  }, [user]);
+
+  const fetchSavedAnalyses = async () => {
+    if (!isSupabaseConfigured) return;
+    const { data, error } = await supabase
+      .from("analyses")
+      .select("*")
+      .order("created_at", { ascending: false });
+    
+    if (data) setSavedAnalyses(data);
+    if (error) console.error("Error fetching saved analyses:", error);
+  };
+
+  const saveAnalysis = async () => {
+    if (!isSupabaseConfigured) return alert("Database not configured. Set Supabase keys in .env.local");
+    if (!user) return alert("Please login to save your analysis!");
+    if (!ticker) return;
+
+    setSaveLoading(true);
+    const { error } = await supabase.from("analyses").insert({
+      user_id: user.id,
+      ticker,
+      fcf,
+      wacc,
+      growth_rate: growthRate,
+      terminal_growth: terminalGrowth,
+      years,
+      shares: sharesOutstanding,
+    });
+
+    if (error) alert(error.message);
+    else {
+      fetchSavedAnalyses();
+      alert("Analysis saved successfully!");
+    }
+    setSaveLoading(false);
+  };
+
+  const loadAnalysis = (item: any) => {
+    setTicker(item.ticker);
+    setFcf(item.fcf);
+    setWacc(item.wacc);
+    setGrowthRate(item.growth_rate);
+    setTerminalGrowth(item.terminal_growth);
+    setYears(item.years);
+    setSharesOutstanding(item.shares);
+    fetchStockData(item.ticker, true);
+  };
+
+  const deleteAnalysis = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isSupabaseConfigured) return;
+    const { error } = await supabase.from("analyses").delete().eq("id", id);
+    if (!error) fetchSavedAnalyses();
+  };
 
   const setScenario = (type: "bear" | "base" | "bull") => {
     if (type === "bear") {
@@ -106,20 +177,29 @@ export default function Home() {
     }
   };
 
-  const fetchStockData = async () => {
-    if (!ticker) return;
+  const fetchStockData = async (activeTickerParam?: string, skipAi?: boolean) => {
+    const activeTicker = activeTickerParam || ticker;
+    if (!activeTicker) return;
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`/api/stock?ticker=${ticker}`);
+      const res = await fetch(`/api/stock?ticker=${activeTicker}`);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       
       setStockData(data);
-      if (data.freeCashFlow) setFcf(data.freeCashFlow);
-      if (data.sharesOutstanding) setSharesOutstanding(data.sharesOutstanding);
       
-      handleGeminiChat(`Analyze ${data.symbol} for DCF and suggest parameters.`, "combined", data.symbol);
+      // Update parameters
+      if (data.freeCashFlow !== null && data.freeCashFlow !== undefined) {
+        setFcf(data.freeCashFlow);
+      }
+      if (data.sharesOutstanding) {
+        setSharesOutstanding(data.sharesOutstanding);
+      }
+
+      if (!skipAi) {
+        handleGeminiChat(`Analyze ${data.symbol} for DCF and suggest parameters.`, "combined", data.symbol);
+      }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
       setError(errorMessage);
@@ -145,8 +225,7 @@ export default function Home() {
           ticker: currentTicker, 
           type, 
           context: input,
-          history: messages,
-          model: aiModel
+          history: messages 
         }),
       });
       const data = await res.json();
@@ -169,6 +248,18 @@ export default function Home() {
             }
             if (params.terminalGrowth) setTerminalGrowth(params.terminalGrowth);
             if (params.years) setYears(params.years);
+            
+            // AI DATA RECOVERY: If Yahoo failed to provide historical FCF, use AI data
+            if (params.historicalFCF && params.historicalFCF.length > 0) {
+              setStockData(prev => {
+                if (!prev) return null;
+                // Only use AI data if Yahoo data is empty
+                if (!prev.historicalFCF || prev.historicalFCF.length === 0) {
+                  return { ...prev, historicalFCF: params.historicalFCF };
+                }
+                return prev;
+              });
+            }
           } catch (e) {
             console.error("Failed to parse AI parameters", e);
           }
@@ -186,7 +277,7 @@ export default function Home() {
   };
 
   useEffect(() => {
-    if (fcf > 0 && sharesOutstanding > 0) {
+    if (fcf !== 0 && sharesOutstanding > 0) {
       const result = calculateDCF(fcf, growthRate, terminalGrowth, wacc, years, sharesOutstanding);
       setDcfResult(result);
     }
@@ -205,19 +296,32 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 p-4 md:p-8 font-sans">
+      {!isSupabaseConfigured && (
+        <div className="max-w-6xl mx-auto mb-6">
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg flex items-center gap-3 shadow-sm">
+            <ShieldAlert className="h-5 w-5 text-amber-600" />
+            <div className="text-sm">
+              <span className="font-bold">Database & Auth disabled:</span> Please add <code className="bg-amber-100 px-1 rounded">NEXT_PUBLIC_SUPABASE_URL</code> and <code className="bg-amber-100 px-1 rounded">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to your <code className="bg-amber-100 px-1 rounded">.env.local</code> file to enable saving features.
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-6xl mx-auto space-y-8">
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="flex-1">
             <h1 className="text-3xl font-bold tracking-tight text-slate-900">DCF Analysis Tool</h1>
             <p className="text-slate-500">Intrinsic value estimation for global stocks</p>
           </div>
-          <div className="flex flex-col md:flex-row items-end md:items-center gap-3">
+          
+          <div className="flex flex-col md:flex-row items-end md:items-center gap-4">
             {aiLoading && (
               <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-full text-xs font-semibold animate-pulse border border-blue-100 shadow-sm whitespace-nowrap">
                 <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
                 Gemini is researching...
               </div>
             )}
+            <AuthUI />
             <div className="flex gap-2">
               <div className="relative">
                 <input
@@ -231,7 +335,7 @@ export default function Home() {
                 <Search className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
               </div>
               <button
-                onClick={fetchStockData}
+                onClick={() => fetchStockData()}
                 disabled={loading}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium transition-colors"
               >
@@ -256,114 +360,138 @@ export default function Home() {
           </div>
         )}
 
-        <div ref={reportRef} className="space-y-8">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <section className="lg:col-span-1 space-y-6">
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5 text-blue-600" />
-                    Parameters
-                  </h2>
-                  <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-                    <button 
-                      onClick={() => setAiModel("flash")}
-                      className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all ${aiModel === "flash" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-                    >
-                      FLASH
-                    </button>
-                    <button 
-                      onClick={() => setAiModel("pro")}
-                      className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all ${aiModel === "pro" ? "bg-white text-purple-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-                    >
-                      PRO
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 pb-2">
-                  <button onClick={() => setScenario("bear")} className="flex flex-col items-center gap-1 p-2 rounded-lg border border-red-100 bg-red-50/30 hover:bg-red-50 text-red-700 transition-all">
-                    <MinusCircle className="h-4 w-4" />
-                    <span className="text-[10px] font-bold uppercase">Bear</span>
-                  </button>
-                  <button onClick={() => setScenario("base")} className="flex flex-col items-center gap-1 p-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 transition-all">
-                    <Zap className="h-4 w-4" />
-                    <span className="text-[10px] font-bold uppercase">Base</span>
-                  </button>
-                  <button onClick={() => setScenario("bull")} className="flex flex-col items-center gap-1 p-2 rounded-lg border border-green-100 bg-green-50/30 hover:bg-green-50 text-green-700 transition-all">
-                    <PlusCircle className="h-4 w-4" />
-                    <span className="text-[10px] font-bold uppercase">Bull</span>
-                  </button>
-                </div>
-
-                <hr className="border-slate-100" />
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Initial FCF (Billion $)</label>
-                    <input type="number" step="0.01" value={fcf} onChange={(e) => setFcf(Number(e.target.value))} className="w-full px-3 py-2 border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Shares Outstanding (Billion)</label>
-                    <input type="number" step="0.01" value={sharesOutstanding} onChange={(e) => setSharesOutstanding(Number(e.target.value))} className="w-full px-3 py-2 border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-                  </div>
-                </div>
-                <hr className="border-slate-100" />
-                <div className="space-y-8">
-                  <div className="space-y-4">
-                    <div className="flex justify-between">
-                      <label className="text-sm font-medium text-slate-700">WACC (%)</label>
-                      <span className="text-sm font-bold text-blue-600">{wacc}%</span>
-                    </div>
-                    <Slider.Root className="relative flex items-center select-none touch-none w-full h-5" value={[wacc]} max={20} min={1} step={0.1} onValueChange={(vals) => setWacc(vals[0])}>
-                      <Slider.Track className="bg-slate-200 relative grow rounded-full h-[4px]"><Slider.Range className="absolute bg-blue-500 rounded-full h-full" /></Slider.Track>
-                      <Slider.Thumb className="block w-5 h-5 bg-white shadow-lg border border-slate-200 rounded-full hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </Slider.Root>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex justify-between">
-                      <label className="text-sm font-medium text-slate-700">Growth Rate (%)</label>
-                      <span className="text-sm font-bold text-blue-600">{growthRate}%</span>
-                    </div>
-                    <Slider.Root className="relative flex items-center select-none touch-none w-full h-5" value={[growthRate]} max={50} min={-20} step={0.5} onValueChange={(vals) => setGrowthRate(vals[0])}>
-                      <Slider.Track className="bg-slate-200 relative grow rounded-full h-[4px]"><Slider.Range className="absolute bg-blue-500 rounded-full h-full" /></Slider.Track>
-                      <Slider.Thumb className="block w-5 h-5 bg-white shadow-lg border border-slate-200 rounded-full hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </Slider.Root>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex justify-between">
-                      <label className="text-sm font-medium text-slate-700">Terminal Growth (%)</label>
-                      <span className="text-sm font-bold text-blue-600">{terminalGrowth}%</span>
-                    </div>
-                    <Slider.Root className="relative flex items-center select-none touch-none w-full h-5" value={[terminalGrowth]} max={10} min={0} step={0.1} onValueChange={(vals) => setTerminalGrowth(vals[0])}>
-                      <Slider.Track className="bg-slate-200 relative grow rounded-full h-[4px]"><Slider.Range className="absolute bg-blue-500 rounded-full h-full" /></Slider.Track>
-                      <Slider.Thumb className="block w-5 h-5 bg-white shadow-lg border border-slate-200 rounded-full hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </Slider.Root>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex justify-between">
-                      <label className="text-sm font-medium text-slate-700">Projection Period (Years)</label>
-                      <span className="text-sm font-bold text-blue-600">{years}</span>
-                    </div>
-                    <Slider.Root className="relative flex items-center select-none touch-none w-full h-5" value={[years]} max={20} min={1} step={1} onValueChange={(vals) => setYears(vals[0])}>
-                      <Slider.Track className="bg-slate-200 relative grow rounded-full h-[4px]"><Slider.Range className="absolute bg-blue-500 rounded-full h-full" /></Slider.Track>
-                      <Slider.Thumb className="block w-5 h-5 bg-white shadow-lg border border-slate-200 rounded-full hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </Slider.Root>
-                  </div>
-                </div>
-                <div className="pt-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="space-y-6">
+            <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-blue-600" />
+                  Parameters
+                </h2>
+                {isSupabaseConfigured && user && ticker && (
                   <button 
-                    onClick={() => handleGeminiChat(`Suggest DCF parameters for ${ticker}`, "research")} 
-                    disabled={aiLoading || !ticker} 
-                    className={`w-full py-3 text-white rounded-lg disabled:opacity-50 font-medium flex items-center justify-center gap-2 transition-all text-sm ${aiModel === "pro" ? "bg-purple-600 hover:bg-purple-700" : "bg-slate-900 hover:bg-slate-800"}`}
+                    onClick={saveAnalysis}
+                    disabled={saveLoading}
+                    className="flex items-center gap-2 text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors"
                   >
-                    {aiModel === "pro" ? <Brain className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
-                    {aiLoading ? "Gemini is thinking..." : `AI Research Assistant (${aiModel.toUpperCase()})`}
+                    {saveLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                    Save
                   </button>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-2 pb-2">
+                <button onClick={() => setScenario("bear")} className="flex flex-col items-center gap-1 p-2 rounded-lg border border-red-100 bg-red-50/30 hover:bg-red-50 text-red-700 transition-all">
+                  <MinusCircle className="h-4 w-4" />
+                  <span className="text-[10px] font-bold uppercase">Bear</span>
+                </button>
+                <button onClick={() => setScenario("base")} className="flex flex-col items-center gap-1 p-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 transition-all">
+                  <Zap className="h-4 w-4" />
+                  <span className="text-[10px] font-bold uppercase">Base</span>
+                </button>
+                <button onClick={() => setScenario("bull")} className="flex flex-col items-center gap-1 p-2 rounded-lg border border-green-100 bg-green-50/30 hover:bg-green-50 text-green-700 transition-all">
+                  <PlusCircle className="h-4 w-4" />
+                  <span className="text-[10px] font-bold uppercase">Bull</span>
+                </button>
+              </div>
+              <hr className="border-slate-100" />
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Initial FCF (Billion $)</label>
+                  <input type="number" step="0.01" value={fcf} onChange={(e) => setFcf(Number(e.target.value))} className="w-full px-3 py-2 border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none" />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Shares Outstanding (Billion)</label>
+                  <input type="number" step="0.01" value={sharesOutstanding} onChange={(e) => setSharesOutstanding(Number(e.target.value))} className="w-full px-3 py-2 border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                </div>
+              </div>
+              <hr className="border-slate-100" />
+              <div className="space-y-8">
+                <div className="space-y-4">
+                  <div className="flex justify-between">
+                    <label className="text-sm font-medium text-slate-700">WACC (%)</label>
+                    <span className="text-sm font-bold text-blue-600">{wacc}%</span>
+                  </div>
+                  <Slider.Root className="relative flex items-center select-none touch-none w-full h-5" value={[wacc]} max={20} min={1} step={0.1} onValueChange={(vals) => setWacc(vals[0])}>
+                    <Slider.Track className="bg-slate-200 relative grow rounded-full h-[4px]"><Slider.Range className="absolute bg-blue-500 rounded-full h-full" /></Slider.Track>
+                    <Slider.Thumb className="block w-5 h-5 bg-white shadow-lg border border-slate-200 rounded-full hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </Slider.Root>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex justify-between">
+                    <label className="text-sm font-medium text-slate-700">Growth Rate (%)</label>
+                    <span className="text-sm font-bold text-blue-600">{growthRate}%</span>
+                  </div>
+                  <Slider.Root className="relative flex items-center select-none touch-none w-full h-5" value={[growthRate]} max={50} min={-20} step={0.5} onValueChange={(vals) => setGrowthRate(vals[0])}>
+                    <Slider.Track className="bg-slate-200 relative grow rounded-full h-[4px]"><Slider.Range className="absolute bg-blue-500 rounded-full h-full" /></Slider.Track>
+                    <Slider.Thumb className="block w-5 h-5 bg-white shadow-lg border border-slate-200 rounded-full hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </Slider.Root>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex justify-between">
+                    <label className="text-sm font-medium text-slate-700">Terminal Growth (%)</label>
+                    <span className="text-sm font-bold text-blue-600">{terminalGrowth}%</span>
+                  </div>
+                  <Slider.Root className="relative flex items-center select-none touch-none w-full h-5" value={[terminalGrowth]} max={10} min={0} step={0.1} onValueChange={(vals) => setTerminalGrowth(vals[0])}>
+                    <Slider.Track className="bg-slate-200 relative grow rounded-full h-[4px]"><Slider.Range className="absolute bg-blue-500 rounded-full h-full" /></Slider.Track>
+                    <Slider.Thumb className="block w-5 h-5 bg-white shadow-lg border border-slate-200 rounded-full hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </Slider.Root>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex justify-between">
+                    <label className="text-sm font-medium text-slate-700">Projection Period (Years)</label>
+                    <span className="text-sm font-bold text-blue-600">{years}</span>
+                  </div>
+                  <Slider.Root className="relative flex items-center select-none touch-none w-full h-5" value={[years]} max={20} min={1} step={1} onValueChange={(vals) => setYears(vals[0])}>
+                    <Slider.Track className="bg-slate-200 relative grow rounded-full h-[4px]"><Slider.Range className="absolute bg-blue-500 rounded-full h-full" /></Slider.Track>
+                    <Slider.Thumb className="block w-5 h-5 bg-white shadow-lg border border-slate-200 rounded-full hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </Slider.Root>
+                </div>
+              </div>
+              <div className="pt-4">
+                <button onClick={() => handleGeminiChat(`Suggest DCF parameters for ${ticker}`, "research")} disabled={aiLoading || !ticker} className="w-full py-3 bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 font-medium flex items-center justify-center gap-2 transition-all text-sm">
+                  <Info className="h-4 w-4" /> {aiLoading ? "Researching..." : "AI Research Assistant"}
+                </button>
               </div>
             </section>
 
-            <section className="lg:col-span-2 space-y-6">
+            {user && savedAnalyses.length > 0 && (
+              <section className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <History className="h-4 w-4" />
+                  My Analyses
+                </h3>
+                <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+                  {savedAnalyses.map((item) => (
+                    <div 
+                      key={item.id}
+                      onClick={() => loadAnalysis(item)}
+                      className="p-3 rounded-lg border border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 cursor-pointer transition-all group"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-bold text-slate-900">{item.ticker}</p>
+                          <p className="text-[10px] text-slate-500">{new Date(item.created_at).toLocaleDateString()}</p>
+                        </div>
+                        <button 
+                          onClick={(e) => deleteAnalysis(item.id, e)}
+                          className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-red-50 text-slate-300 hover:text-red-500 rounded-md transition-all"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <div className="mt-2 flex gap-2">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">WACC: {item.wacc}%</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">G: {item.growth_rate}%</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+
+          <div className="lg:col-span-2 space-y-6">
+            <div ref={reportRef} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                   <p className="text-sm font-medium text-slate-500 mb-1">Intrinsic Value (Fair Price)</p>
@@ -419,22 +547,26 @@ export default function Home() {
                 />
               )}
 
+              <div className="space-y-4">
+                {stockData?.historicalFCF && stockData.historicalFCF.length > 0 ? (
+                  <HistoricalFCFChart data={stockData.historicalFCF} />
+                ) : stockData ? (
+                  <div className="bg-white p-8 rounded-xl border border-slate-200 border-dashed flex flex-col items-center justify-center text-slate-400 gap-2">
+                    <BarChart3 className="h-8 w-8 opacity-20" />
+                    <p className="text-sm font-medium">No Historical FCF Data found on Yahoo Finance</p>
+                    <p className="text-[10px] text-blue-500 font-bold uppercase tracking-tight">AI Assistant is researching historical data as fallback...</p>
+                  </div>
+                ) : null}
+              </div>
+
               {dcfResult && stockData && (
                 <SensitivityTable fcf={fcf} sharesOutstanding={sharesOutstanding} terminalGrowth={terminalGrowth} years={years} wacc={wacc} growthRate={growthRate} currency={stockData.currency || "$"} />
               )}
 
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-[500px]">
                 <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-                  <h3 className="font-semibold flex items-center gap-2">
-                    <MessageSquare className="h-5 w-5 text-blue-600" /> 
-                    Gemini Analysis
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${aiModel === "pro" ? "bg-purple-50 text-purple-600 border-purple-100" : "bg-blue-50 text-blue-600 border-blue-100"}`}>
-                      {aiModel.toUpperCase()}
-                    </span>
-                    <span className="text-xs font-medium px-2 py-1 bg-slate-100 text-slate-600 rounded-full">{aiLoading ? "Thinking..." : "AI Assistant"}</span>
-                  </div>
+                  <h3 className="font-semibold flex items-center gap-2"><MessageSquare className="h-5 w-5 text-blue-600" /> Gemini Analysis</h3>
+                  <span className="text-xs font-medium px-2 py-1 bg-blue-50 text-blue-600 rounded-full">{aiLoading ? "Thinking..." : "AI Assistant"}</span>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/30">
                   {messages.map((msg, idx) => (
@@ -447,12 +579,12 @@ export default function Home() {
                 </div>
                 <div className="p-4 border-t border-slate-100 bg-white rounded-b-xl">
                   <div className="flex gap-2">
-                    <input type="text" placeholder={`Ask Gemini ${aiModel.toUpperCase()}...`} className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && chatInput && handleGeminiChat(chatInput, "chat")} />
-                    <button onClick={() => handleGeminiChat(chatInput, "chat")} disabled={aiLoading || !chatInput} className={`px-4 py-2 text-white rounded-lg font-medium text-sm disabled:opacity-50 transition-colors ${aiModel === "pro" ? "bg-purple-600 hover:bg-purple-700" : "bg-slate-900 hover:bg-slate-800"}`}>Send</button>
+                    <input type="text" placeholder="Ask Gemini about this stock..." className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && chatInput && handleGeminiChat(chatInput, "chat")} />
+                    <button onClick={() => handleGeminiChat(chatInput, "chat")} disabled={aiLoading || !chatInput} className="px-4 py-2 bg-slate-900 text-white rounded-lg font-medium text-sm disabled:opacity-50 hover:bg-slate-800">Send</button>
                   </div>
                 </div>
               </div>
-            </section>
+            </div>
           </div>
         </div>
       </div>

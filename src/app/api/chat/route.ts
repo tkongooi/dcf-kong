@@ -25,6 +25,13 @@ export async function POST(request: Request) {
         "growthRate": number (percentage for next 5 years),
         "terminalGrowth": number (percentage),
         "years": number (typically 5 or 10),
+        "historicalFCF": [
+          {"date": "YYYY-MM-DD", "fcf": number},
+          {"date": "YYYY-MM-DD", "fcf": number},
+          {"date": "YYYY-MM-DD", "fcf": number},
+          {"date": "YYYY-MM-DD", "fcf": number},
+          {"date": "YYYY-MM-DD", "fcf": number}
+        ],
         "reasoning": "brief explanation"
       }`;
       const result = await model.generateContent(prompt);

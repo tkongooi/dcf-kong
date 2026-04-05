@@ -1,3 +1,7 @@
-disable the next prompt request before gemini finish responding
+╯
+✦ I have successfully created a checkpoint for the project.
 
-still something wrong with gemini api?
+  💾 How to use this checkpoint:
+   1. Reverting to this state: If you ever make changes you don't like, you can run git reset --hard 98d3ede (the hash of this commit) to return to exactly this version.
+   2. Tracking your history: You can use git log anytime to see your list of checkpoints.
+   3. Experimental changes: If you want to try something risky without affecting this version, I can help you create a new branch (e.g., git checkout -b new-experiment).
