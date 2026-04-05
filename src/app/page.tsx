@@ -535,6 +535,19 @@ export default function Home() {
                     <input type="number" step="0.1" value={totalDebt} onChange={(e) => setTotalDebt(Number(e.target.value))} className="w-full px-3 py-2 border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm" />
                   </div>
                 </div>
+                {dcfResult && (
+                  <div className="pt-2">
+                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Equity Value</span>
+                        <Info className="h-3 w-3 text-slate-400" title="Equity Value = Enterprise Value + Cash - Debt" />
+                      </div>
+                      <p className="text-xl font-bold text-slate-900">
+                        {stockData?.currency || "$"}{dcfResult.equityValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}B
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
               <hr className="border-slate-100" />
               <div className="space-y-8">
@@ -636,7 +649,7 @@ export default function Home() {
             <div ref={reportRef} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                  <p className="text-sm font-medium text-slate-500 mb-1">Intrinsic Value (Fair Price)</p>
+                  <p className="text-sm font-medium text-slate-500 mb-1">Equity Value (per Share)</p>
                   <h3 className="text-4xl font-bold text-slate-900">{stockData?.currency || "$"} {dcfResult ? dcfResult.valuePerShare.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "---"}</h3>
                   {stockData && dcfResult && stockData.price && (
                     <div className="mt-2">
