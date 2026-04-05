@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import { User, LogIn, LogOut, Mail, Loader2, CheckCircle, AlertTriangle } from "lucide-react";
+import { User, LogIn, LogOut, Mail, Loader2, AlertTriangle, KeyRound } from "lucide-react";
 
 export const AuthUI = () => {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
   const [user, setUser] = useState<any>(null);
-  const [sent, setSent] = useState(false);
+  const [showOtpInput, setShowOtpInput] = useState(false);
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
@@ -31,28 +32,48 @@ export const AuthUI = () => {
     );
   }
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setSent(false);
     
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: window.location.origin,
+        shouldCreateUser: true,
       },
     });
 
     if (error) {
       alert(error.message);
     } else {
-      setSent(true);
+      setShowOtpInput(true);
+    }
+    setLoading(false);
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: otp,
+      type: 'email'
+    });
+
+    if (error) {
+      alert("Invalid code: " + error.message);
+    } else {
+      setShowOtpInput(false);
+      setOtp("");
     }
     setLoading(false);
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    setShowOtpInput(false);
+    setEmail("");
   };
 
   if (user) {
@@ -79,13 +100,29 @@ export const AuthUI = () => {
 
   return (
     <div className="flex items-center gap-2">
-      {sent ? (
-        <div className="flex items-center gap-2 text-green-600 bg-green-50 px-3 py-2 rounded-lg border border-green-100 text-xs font-medium animate-in fade-in slide-in-from-top-1">
-          <CheckCircle className="h-4 w-4" />
-          Check your email for the magic link!
-        </div>
+      {showOtpInput ? (
+        <form onSubmit={handleVerifyOtp} className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Enter 6-digit code"
+              className="pl-8 pr-4 py-1.5 bg-white border border-green-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-green-500 w-48"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              required
+            />
+            <KeyRound className="absolute left-2.5 top-2 h-3.5 w-3.5 text-green-600" />
+          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 disabled:opacity-50 flex items-center gap-1.5 transition-all shadow-sm"
+          >
+            {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : "Verify"}
+          </button>
+        </form>
       ) : (
-        <form onSubmit={handleLogin} className="flex items-center gap-2">
+        <form onSubmit={handleSendOtp} className="flex items-center gap-2">
           <div className="relative">
             <input
               type="email"
