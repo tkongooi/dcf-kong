@@ -540,7 +540,9 @@ export default function Home() {
                     <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
                       <div className="flex justify-between items-center mb-1">
                         <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Equity Value</span>
-                        <Info className="h-3 w-3 text-slate-400" title="Equity Value = Enterprise Value + Cash - Debt" />
+                        <span title="Equity Value = Enterprise Value + Cash - Debt">
+                          <Info className="h-3 w-3 text-slate-400 cursor-help" />
+                        </span>
                       </div>
                       <p className="text-xl font-bold text-slate-900">
                         {stockData?.currency || "$"}{dcfResult.equityValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}B
