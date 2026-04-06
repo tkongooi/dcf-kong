@@ -279,8 +279,6 @@ export default function Home() {
       
       if (data.error) throw new Error(data.error);
 
-      let assistantMessage = data.text;
-
       if (type === "all-in-one") {
         try {
           const jsonMatch = data.text.match(/\{[\s\S]*\}/);
@@ -322,8 +320,13 @@ export default function Home() {
               setPeers(peersData);
             }
 
-            // 3. Prepare Clean Message (remove JSON)
-            assistantMessage = allData.analysis || data.text.replace(/\{[\s\S]*\}/, "").trim();
+            // 3. Handle Analysis/Chat
+            if (allData.analysis) {
+              setMessages(prev => [...prev, { role: "assistant", content: allData.analysis }]);
+            } else {
+              // Fallback to full text if structured analysis missing
+              setMessages(prev => [...prev, { role: "assistant", content: data.text }]);
+            }
           }
         } catch (e) {
           console.error("Failed to parse all-in-one data", e);
@@ -338,6 +341,21 @@ export default function Home() {
         } catch (e) {
           console.error("Failed to parse resolution", e);
           return null;
+        }
+      }
+
+      if (type === "peers") {
+        try {
+          const peerTickers = JSON.parse(data.text);
+          if (Array.isArray(peerTickers)) {
+            // Fetch metrics for peers + main stock
+            const tickersToFetch = Array.from(new Set([currentTicker, ...peerTickers])).join(",");
+            const peersRes = await fetch(`/api/stocks?tickers=${tickersToFetch}`);
+            const peersData = await peersRes.json();
+            setPeers(peersData);
+          }
+        } catch (e) {
+          console.error("Failed to parse or fetch peers", e);
         }
       }
 
@@ -358,28 +376,24 @@ export default function Home() {
             if (params.terminalGrowth) setTerminalGrowth(params.terminalGrowth);
             if (params.years) setYears(params.years);
             
+            // AI DATA RECOVERY: If Yahoo failed to provide historical FCF, use AI data
             if (params.historicalFCF && params.historicalFCF.length > 0) {
               setStockData(prev => {
                 if (!prev) return null;
+                // Only use AI data if Yahoo data is empty
                 if (!prev.historicalFCF || prev.historicalFCF.length === 0) {
                   return { ...prev, historicalFCF: params.historicalFCF };
                 }
                 return prev;
               });
             }
-            
-            // Clean the message for the chat
-            assistantMessage = data.text.replace(/\{[\s\S]*\}/, "").trim();
           } catch (e) {
             console.error("Failed to parse AI parameters", e);
           }
         }
       }
 
-      // Hide internal types from chat if necessary
-      if (type !== "peers") {
-        setMessages(prev => [...prev, { role: "assistant", content: assistantMessage }]);
-      }
+      setMessages(prev => [...prev, { role: "assistant", content: data.text }]);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
       setMessages(prev => [...prev, { role: "assistant", content: `Error: ${errorMessage}. Please ensure GEMINI_API_KEY is set in your environment.` }]);
