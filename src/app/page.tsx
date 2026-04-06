@@ -120,6 +120,7 @@ export default function Home() {
     const { error } = await supabase.from("analyses").insert({
       user_id: user.id,
       ticker,
+      company_name: stockData?.shortName || ticker,
       fcf,
       wacc,
       growth_rate: growthRate,
@@ -627,8 +628,13 @@ export default function Home() {
                     >
                       <div className="flex justify-between items-start">
                         <div>
-                          <p className="font-bold text-slate-900">{item.ticker}</p>
-                          <p className="text-[10px] text-slate-500">{new Date(item.created_at).toLocaleDateString()}</p>
+                          <p className="font-bold text-slate-900 leading-tight">
+                            {item.company_name || item.ticker}
+                          </p>
+                          <p className="text-[10px] font-bold text-blue-600 uppercase tracking-tight mt-0.5">
+                            {item.ticker}
+                          </p>
+                          <p className="text-[10px] text-slate-400 mt-1">{new Date(item.created_at).toLocaleDateString()}</p>
                         </div>
                         <button 
                           onClick={(e) => deleteAnalysis(item.id, e)}
