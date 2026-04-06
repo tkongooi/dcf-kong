@@ -126,6 +126,9 @@ export default function Home() {
       growth_rate: growthRate,
       terminal_growth: terminalGrowth,
       years,
+      transition_years: transitionYears,
+      total_cash: totalCash,
+      total_debt: totalDebt,
       shares: sharesOutstanding,
     });
 
@@ -144,6 +147,9 @@ export default function Home() {
     setGrowthRate(item.growth_rate);
     setTerminalGrowth(item.terminal_growth);
     setYears(item.years);
+    setTransitionYears(item.transition_years ?? 5);
+    setTotalCash(item.total_cash ?? 0);
+    setTotalDebt(item.total_debt ?? 0);
     setSharesOutstanding(item.shares);
     fetchStockData(item.ticker, true);
   };
