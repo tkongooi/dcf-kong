@@ -1,50 +1,49 @@
 # Project Status: DCF Analysis Tool (DCF by Kong)
 
 ## 🚀 Current State
-A professional-grade, fully deployed web application for Discounted Cash Flow (DCF) analysis. The tool integrates real-time stock data, historical financial analysis, and AI-driven research.
+A professional-grade, fully deployed web application for Discounted Cash Flow (DCF) analysis. The tool integrates real-time stock data, historical financial analysis, and AI-driven research. Now fully optimized as a Progressive Web App (PWA) with advanced 3-stage valuation logic.
 
 ### 🏗️ Technical Architecture
 - **Frontend:** Next.js 15 (App Router), Tailwind CSS v4, Lucide Icons, Recharts.
 - **Backend:** Next.js Route Handlers, `yahoo-finance2` (Deep Scraper).
-- **Database/Auth:** Supabase (Auth Magic Links + Postgres Database).
-- **AI Layer:** Google Gemini AI (`gemini-flash-latest`).
+- **Database/Auth:** Supabase (Auth OTP + Postgres Database).
+- **AI Layer:** Google Gemini AI (`gemini-3.1-flash-lite-preview` & `gemini-2.5-flash`).
 - **Deployment:** Vercel (Production Ready).
+- **Mobile:** PWA (Progressive Web App) with standalone window support.
 
 ### ✅ Completed Milestones
-1.  **Project Scaffolding:** Initialized with TypeScript and professional styling.
-2.  **Robust Stock API:**
-    - Deep property scanner for international stocks (HK, KLSE, etc.).
-    - 5-year historical price and FCF data retrieval.
-    - Fallback logic for missing financial statements.
-3.  **Interactive DCF Engine:**
-    - Real-time sliders for WACC, Growth, and Terminal values.
-    - Dynamic scenario analysis (Bear, Base, Bull cases).
-4.  **Data Visualization:**
+1.  **Advanced DCF Engine:**
+    - **3-Stage Growth Model:** Initial High Growth, Linear Transition (Step-down), and Terminal Perpetuity phases.
+    - **Net Debt Adjustment:** Enterprise Value to Equity Value bridge (EV + Cash - Debt).
+    - Real-time sliders for WACC, 3-Stage Growth, and Time Horizons.
+2.  **Data Visualization:**
+    - **Enhanced FCF Chart:** Color-coded visualization showing History, Initial Projection, and Transition phases.
+    - **3-Stage Summary Table:** Clear breakdown of growth rates and durations for each stage.
     - 5Y Historical Price Chart with Fair Value overlay.
-    - 5Y Historical FCF Chart (OCF vs FCF breakdown).
-    - Sensitivity Table grid.
-5.  **Gemini AI Integration:**
-    - AI Research Assistant for automated parameter estimation.
-    - AI Data Recovery for missing historical financials.
-    - Context-aware qualitative analysis chatbox.
-    - **Peer Comparison:** AI-driven identification and fetching of industry competitors for valuation benchmarking.
-6.  **Persistence & User Features:**
-    - Supabase Auth (Magic Links).
-    - Save/Load/Delete functionality for DCF analyses.
-    - PDF Export for professional reports.
-7.  **Production Polish:**
-    - Custom metadata ("DCF by Kong").
-    - Personal branding in header.
-    - Full type safety and successful production builds.
+3.  **Progressive Web App (PWA):**
+    - Fully installable on iOS, Android, and Desktop.
+    - Custom standalone window mode (no browser address bar).
+    - Optimized manifest and service worker caching.
+    - **OTP Authentication:** Switched to One-Time Password flow to support secure login inside the iOS PWA sandbox.
+4.  **Gemini AI Integration:**
+    - **Smart Search:** Automated ticker resolution from company names with multi-exchange suggestions.
+    - **Peer Comparison:** AI-driven identification and benchmarking of industry competitors.
+    - **All-in-One Research:** Optimized API usage by consolidating DCF parameters and peer discovery into a single request.
+    - Context-aware qualitative analysis AI Chatbot.
+5.  **Persistence & User Features:**
+    - Supabase Auth (OTP Login).
+    - Save/Load/Delete functionality for DCF analyses, including company names and all advanced parameters.
+    - PDF Export for professional valuation reports.
 
 ### 🛠️ Known Configuration
-- **Model:** `gemini-flash-latest` (optimized for speed and reliability).
+- **Model (Research):** `gemini-3.1-flash-lite-preview`
+- **Model (Search):** `gemini-2.5-flash`
 - **Deployment URL:** `https://dcf-kong.vercel.app`
 
 ### 📍 Next Steps
-1.  **Advanced DCF:** Implement a 2-stage growth model for even higher accuracy.
-2.  **Mobile App:** Convert the responsive web view into a PWA (Progressive Web App).
-3.  **Net Debt Adjustment:** Incorporate Net Debt/Cash into the DCF calculation for true Equity Value.
+1.  **Financial Ratio Analysis:** Add a dedicated section for ROE, ROIC, and Debt/Equity metrics.
+2.  **Technical Indicators:** Incorporate Moving Averages and RSI into the historical price chart.
+3.  **Multi-Scenario Comparison:** Allow users to save and compare Bear, Base, and Bull cases side-by-side.
 
 ---
 
@@ -52,3 +51,4 @@ A professional-grade, fully deployed web application for Discounted Cash Flow (D
 - Initial Checkpoint: `98d3ede`
 - Auth & Database Checkpoint: `2510bd0`
 - Final Polish Checkpoint: `a5fdb91`
+- Advanced DCF & PWA Checkpoint: `e793993`

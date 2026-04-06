@@ -1,18 +1,20 @@
 # DCF by Kong
 
-A professional-grade web application to perform Discounted Cash Flow (DCF) analysis on global stocks, featuring real-time financial data fetching and an integrated AI research analyst powered by Google Gemini.
+A professional-grade web application to perform Advanced 3-Stage Discounted Cash Flow (DCF) analysis on global stocks, featuring real-time financial data fetching and an integrated AI research analyst powered by Google Gemini.
 
 **Live Site:** [https://dcf-kong.vercel.app](https://dcf-kong.vercel.app)
 
 ---
 
 ## 🌟 Key Features
+- **Advanced 3-Stage DCF:** Realistic valuation modeling with Initial High-Growth, Linear Transition (Step-down), and Terminal Perpetuity phases.
+- **Net Debt Adjustment:** Accurate calculation of Equity Value per Share by factoring in Total Cash and Total Debt.
+- **PWA Optimized:** Installable as a standalone app on iOS, Android, and Desktop for a native experience.
 - **Global Stock Support:** Advanced scraping for US, HK, CN, KLSE, SGX, and LSE stocks.
-- **AI Research Assistant:** Automatically researches and suggests DCF parameters using Gemini Flash.
-- **AI Data Recovery:** Smart fallback that uses AI to find missing historical financials when Yahoo Finance is incomplete.
-- **Interactive Visualization:** 5-year historical price and FCF charts with intrinsic value overlays.
-- **Scenario Analysis:** One-click stress testing for Bear, Base, and Bull cases.
-- **User Dashboard:** Secure Magic Link authentication via Supabase to save and manage your analyses.
+- **Smart AI Search:** Search by company name (e.g., "Tencent" or "Apple"); Gemini automatically resolves the correct ticker and suggests alternatives.
+- **AI Research Assistant:** Automatically researches and suggests DCF parameters, including transition periods and peer comparison.
+- **Interactive Visualization:** 5-year historical price and 3-stage FCF projection charts with clear stage-by-stage breakdowns.
+- **User Dashboard:** Secure OTP-based authentication via Supabase to save and manage complex analyses.
 - **Professional Reports:** Export your full valuation as a clean PDF summary.
 
 ---
@@ -25,10 +27,10 @@ To continue working on this project exactly where we left off, copy and paste th
 ---
 
 ## 📅 Final Progress Summary
-- **UI/UX:** Fully responsive dashboard with a cohesive sidebar for parameters and history.
-- **Charts:** Multi-layered interactive charts using `recharts` and `html-to-image` for high-quality SVG/PNG rendering.
-- **Backend:** Robust Next.js API with deep scanning capabilities for international stock data.
-- **Security:** Hardened production build with encrypted environment variables and Supabase RLS policies.
+- **UI/UX:** Fully responsive PWA dashboard with matching headers for valuation and company info.
+- **Charts:** Enhanced Recharts visualization showing 3 distinct projection stages with interactive tooltips.
+- **Auth:** Hardened OTP flow designed specifically for standalone iOS/Android installations.
+- **Backend:** High-performance Next.js API utilizing dual-model AI logic (`Gemini 3.1 Flash Lite Preview` & `Gemini 2.5 Flash`) for speed and accuracy.
 
 ---
 
