@@ -665,17 +665,18 @@ export default function Home() {
                 </div>
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                   <p className="text-sm font-medium text-slate-500 mb-1">Company Info</p>
-                  <div className="flex flex-col">
-                    <h3 className="text-2xl font-bold text-slate-900 truncate">
-                      {stockData ? stockData.shortName : "No Data"}
-                    </h3>
+                  <h3 className="text-2xl font-bold text-slate-900 truncate">
+                    {stockData ? stockData.shortName : "No Data"}
+                  </h3>
+                  <p className="text-sm text-slate-500 mt-1 flex items-center gap-2">
                     {stockData && (
-                      <p className="text-sm font-bold text-blue-600 uppercase tracking-tight">
-                        {stockData.symbol}
-                      </p>
+                      <>
+                        <span className="font-bold text-blue-600 uppercase tracking-tight">{stockData.symbol}</span>
+                        <span>•</span>
+                      </>
                     )}
-                  </div>
-                  <p className="text-sm text-slate-500 mt-1">{stockData?.sector ? `${stockData.sector} • ${stockData.industry}` : "Search a ticker to get started"}</p>
+                    {stockData?.sector ? `${stockData.sector} • ${stockData.industry}` : "Search a ticker to get started"}
+                  </p>
                 </div>
               </div>
 
