@@ -41,9 +41,16 @@ A professional-grade, fully deployed web application for Discounted Cash Flow (D
 - **Deployment URL:** `https://dcf-kong.vercel.app`
 
 ### 📍 Next Steps
-1.  **Financial Ratio Analysis:** Add a dedicated section for ROE, ROIC, and Debt/Equity metrics.
-2.  **Technical Indicators:** Incorporate Moving Averages and RSI into the historical price chart.
+1.  **Financial Ratio Analysis:** Add a dedicated section for ROE, ROIC, and Debt/Equity metrics. (COMPLETED)
+2.  **Technical Indicators:** Incorporate Moving Averages and RSI into the historical price chart. (COMPLETED)
 3.  **Multi-Scenario Comparison:** Allow users to save and compare Bear, Base, and Bull cases side-by-side.
+
+---
+
+## ⚠️ CRITICAL MANDATES (DO NOT REMOVE)
+- **AI FEEDBACK UI:** Never remove the "Gemini is Researching" or "AI Assistant is researching" loading indicators. These provide critical visual feedback while the AI is performing background analysis.
+- **SECURITY:** Always ensure RLS is enabled on Supabase tables.
+- **PWA:** Maintain standalone window support for iOS/Android installations.
 
 ---
 

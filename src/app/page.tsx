@@ -762,6 +762,19 @@ export default function Home() {
               )}
 
               <div className="space-y-4">
+                {chatLoading && (
+                  <div className="bg-blue-50/50 p-8 rounded-xl border border-blue-100 border-dashed flex flex-col items-center justify-center text-blue-400 gap-3 animate-pulse">
+                    <div className="relative">
+                      <BarChart3 className="h-10 w-10 opacity-40" />
+                      <Loader2 className="h-10 w-10 animate-spin absolute inset-0 opacity-60" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-bold text-blue-600 uppercase tracking-widest">Gemini is Researching</p>
+                      <p className="text-[10px] text-blue-400 font-medium">Analyzing historical data and optimizing DCF parameters...</p>
+                    </div>
+                  </div>
+                )}
+
                 {stockData?.historicalFCF && stockData.historicalFCF.length > 0 ? (
                   <div className="space-y-6">
                     <HistoricalFCFChart 
