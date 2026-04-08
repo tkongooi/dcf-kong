@@ -762,7 +762,7 @@ export default function Home() {
               )}
 
               <div className="space-y-4">
-                {chatLoading && (
+                {aiLoading && (
                   <div className="bg-blue-50/50 p-8 rounded-xl border border-blue-100 border-dashed flex flex-col items-center justify-center text-blue-400 gap-3 animate-pulse">
                     <div className="relative">
                       <BarChart3 className="h-10 w-10 opacity-40" />
