@@ -121,7 +121,7 @@ export const StockPriceChart: React.FC<StockPriceChartProps> = ({ history, intri
             <Tooltip 
               contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
               labelFormatter={(date) => new Date(date).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })}
-              formatter={(val: any, name: string) => {
+              formatter={(val: any, name: any) => {
                 if (name === "price") return [`$${Number(val).toFixed(2)}`, "Price"];
                 if (name === "ma12") return [`$${Number(val).toFixed(2)}`, "MA (12M)"];
                 if (name === "rsi") return [`${Number(val).toFixed(1)}`, "RSI (14)"];
@@ -184,11 +184,11 @@ export const StockPriceChart: React.FC<StockPriceChartProps> = ({ history, intri
           <div className="flex gap-4">
             <div className="flex items-center gap-1.5">
               <div className="w-1.5 h-1.5 bg-red-500 rounded-full" />
-              <span className="text-[9px] text-slate-500 font-medium">Overbought (>70)</span>
+              <span className="text-[9px] text-slate-500 font-medium">Overbought (&gt;70)</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-              <span className="text-[9px] text-slate-500 font-medium">Oversold (<30)</span>
+              <span className="text-[9px] text-slate-500 font-medium">Oversold (&lt;30)</span>
             </div>
           </div>
         </div>
