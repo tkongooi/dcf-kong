@@ -28,6 +28,11 @@ interface StockData {
   beta: number | null;
   totalCash: number;
   totalDebt: number;
+  returnOnEquity: number | null;
+  returnOnAssets: number | null;
+  debtToEquity: number | null;
+  currentRatio: number | null;
+  operatingMargins: number | null;
   freeCashFlow: number | null;
   historicalFCF: { date: string; fcf: number; ocf?: number; capex?: number }[];
   sector?: string;
@@ -721,6 +726,30 @@ export default function Home() {
                 <div className="space-y-1">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-none">Div. Yield</p>
                   <p className="text-lg font-bold text-slate-800">{stockData?.dividendYield ? `${Number(stockData.dividendYield).toFixed(1)}%` : "---"}</p>
+                </div>
+              </div>
+
+              {/* Financial Ratios Section */}
+              <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200/60 grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider leading-none">ROE</p>
+                  <p className="text-base font-bold text-slate-700">{stockData?.returnOnEquity ? `${Number(stockData.returnOnEquity).toFixed(1)}%` : "---"}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider leading-none">ROA</p>
+                  <p className="text-base font-bold text-slate-700">{stockData?.returnOnAssets ? `${Number(stockData.returnOnAssets).toFixed(1)}%` : "---"}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider leading-none">Debt/Equity</p>
+                  <p className="text-base font-bold text-slate-700">{stockData?.debtToEquity ? Number(stockData.debtToEquity).toFixed(2) : "---"}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider leading-none">Current Ratio</p>
+                  <p className="text-base font-bold text-slate-700">{stockData?.currentRatio ? Number(stockData.currentRatio).toFixed(2) : "---"}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider leading-none">Op. Margin</p>
+                  <p className="text-base font-bold text-slate-700">{stockData?.operatingMargins ? `${Number(stockData.operatingMargins).toFixed(1)}%` : "---"}</p>
                 </div>
               </div>
 
