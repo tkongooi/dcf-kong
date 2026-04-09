@@ -11,8 +11,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const modelResearch = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
-    const modelResolve = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const modelResearch = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
+    const modelResolve = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
 
     if (type === "peers") {
       const prompt = `Identify 4-5 direct industry competitors (stock tickers) for ${ticker}. 
