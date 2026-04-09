@@ -7,7 +7,7 @@ A professional-grade, fully deployed web application for Discounted Cash Flow (D
 - **Frontend:** Next.js 16 (App Router), Tailwind CSS v4, Lucide Icons, Recharts.
 - **Backend:** Next.js Route Handlers, `yahoo-finance2` (Deep Scraper).
 - **Database/Auth:** Supabase (Auth OTP + Postgres Database).
-- **AI Layer:** Google Gemini AI (`gemini-3.1-flash-lite`).
+- **AI Layer:** Google Gemini AI (`gemma-4-31b-it`).
 - **Deployment:** Vercel (Production Ready).
 - **Mobile:** PWA (Progressive Web App) with standalone window support.
 
