@@ -28,10 +28,11 @@ To continue working on this project exactly where we left off, copy and paste th
 
 ---
 
-## 📅 Final Progress Summary
+## 📅 Progress Summary
 - **UI/UX:** Added Financial Ratios section and enhanced the Price Chart with technical indicators.
 - **Backend:** Updated API to fetch comprehensive fundamental data and hardened build process against type errors.
 - **Reliability:** Enforced critical mandates for AI feedback and security (RLS).
+- **Hardening (April 2026):** Fixed critical DCF validation bugs (division by zero), hardened AI JSON parsing, memoized expensive components, fixed auth memory leak, and resolved Next.js 16 Turbopack compatibility.
 
 ---
 

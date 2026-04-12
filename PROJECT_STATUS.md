@@ -38,6 +38,14 @@ A professional-grade, fully deployed web application for Discounted Cash Flow (D
 - **SECURITY:** Always ensure Row Level Security (RLS) is enabled on Supabase tables (specifically `public.analyses`).
 - **PWA:** Maintain standalone window support for iOS/Android installations.
 
+7.  **Bug Fixes & Hardening (April 2026):**
+    - **DCF Input Validation:** Added guards for WACC <= Terminal Growth (division by zero) and zero shares outstanding. Returns structured error with UI warning banner.
+    - **AI JSON Parsing:** Replaced greedy regex with balanced-brace extractor that tries markdown code fences first, preventing mis-parsed AI responses.
+    - **Performance:** Memoized SensitivityTable (React.memo + useMemo for 25-cell DCF grid). Fixed StockPriceChart data mutation (deep copy instead of mutating parent state).
+    - **Auth Leak Fix:** Fixed Supabase auth listener memory leak (missing unsubscribe on cleanup).
+    - **Turbopack Compat:** Added empty `turbopack: {}` config to silence Next.js 16 warning from PWA webpack plugin.
+    - **Supabase Init:** Cleaned up client initialization with proper `isSupabaseConfigured` gating.
+
 ### 📍 Next Steps
 1.  **Multi-Scenario Comparison:** Allow users to save and compare Bear, Base, and Bull cases side-by-side.
 2.  **Portfolio Tracking:** Aggregate valuation dashboard for all saved analyses.
@@ -49,4 +57,5 @@ A professional-grade, fully deployed web application for Discounted Cash Flow (D
 - Auth & Database Checkpoint: `2510bd0`
 - Final Polish Checkpoint: `a5fdb91`
 - Advanced DCF & PWA Checkpoint: `e793993`
-- Financial & Technical Checkpoint: `aa7d490` (Latest)
+- Financial & Technical Checkpoint: `aa7d490`
+- Bug Fixes & Hardening Checkpoint: `3b627e6` (Latest)
