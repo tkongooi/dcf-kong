@@ -9,6 +9,39 @@ export function calculateDCF(
   totalCash: number = 0,
   totalDebt: number = 0
 ) {
+  // Input validation: WACC must exceed terminal growth for Gordon Growth Model
+  if (wacc <= terminalGrowthRate) {
+    return {
+      enterpriseValue: 0,
+      equityValue: 0,
+      netDebt: totalDebt - totalCash,
+      valuePerShare: 0,
+      projectedFCF: [],
+      annualGrowthRates: [],
+      terminalValue: 0,
+      presentValue: 0,
+      presentTerminalValue: 0,
+      totalPeriods: 0,
+      error: 'WACC must be greater than Terminal Growth Rate',
+    };
+  }
+
+  if (sharesOutstanding <= 0) {
+    return {
+      enterpriseValue: 0,
+      equityValue: 0,
+      netDebt: totalDebt - totalCash,
+      valuePerShare: 0,
+      projectedFCF: [],
+      annualGrowthRates: [],
+      terminalValue: 0,
+      presentValue: 0,
+      presentTerminalValue: 0,
+      totalPeriods: 0,
+      error: 'Shares outstanding must be greater than zero',
+    };
+  }
+
   const projectedFCF = [];
   const annualGrowthRates = [];
   let currentFCF = fcf;
@@ -63,6 +96,7 @@ export function calculateDCF(
     terminalValue,
     presentValue,
     presentTerminalValue,
-    totalPeriods
+    totalPeriods,
+    error: null,
   };
 }

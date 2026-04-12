@@ -22,14 +22,14 @@ export const StockPriceChart: React.FC<StockPriceChartProps> = ({ history, intri
   const chartData = useMemo(() => {
     if (!history || history.length === 0) return [];
 
-    const data = [...history];
+    const data = history.map(h => ({ ...h } as { date: string; price: number; ma12?: number; rsi?: number }));
     
     // 1. Calculate 12-Month Moving Average (MA12) - Since interval is '1mo'
     for (let i = 0; i < data.length; i++) {
       if (i >= 11) {
         const slice = data.slice(i - 11, i + 1);
         const sum = slice.reduce((acc, curr) => acc + curr.price, 0);
-        (data[i] as any).ma12 = sum / 12;
+        data[i].ma12 = sum / 12;
       }
     }
 
@@ -48,7 +48,7 @@ export const StockPriceChart: React.FC<StockPriceChartProps> = ({ history, intri
         avgLoss += loss / rsiPeriod;
         if (i === rsiPeriod) {
           const rs = avgGain / (avgLoss || 1);
-          (data[i] as any).rsi = 100 - (100 / (1 + rs));
+          data[i].rsi = 100 - (100 / (1 + rs));
         }
       } else {
         avgGain = (avgGain * (rsiPeriod - 1) + gain) / rsiPeriod;
@@ -173,12 +173,12 @@ export const StockPriceChart: React.FC<StockPriceChartProps> = ({ history, intri
       </div>
       
       {/* RSI Indicator Info */}
-      {chartData.length > 0 && (chartData[chartData.length - 1] as any).rsi && (
+      {chartData.length > 0 && chartData[chartData.length - 1].rsi != null && (
         <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Current RSI:</span>
-            <span className={`text-sm font-bold ${(chartData[chartData.length - 1] as any).rsi > 70 ? 'text-red-500' : (chartData[chartData.length - 1] as any).rsi < 30 ? 'text-green-500' : 'text-purple-600'}`}>
-              {(chartData[chartData.length - 1] as any).rsi.toFixed(1)}
+            <span className={`text-sm font-bold ${chartData[chartData.length - 1].rsi! > 70 ? 'text-red-500' : chartData[chartData.length - 1].rsi! < 30 ? 'text-green-500' : 'text-purple-600'}`}>
+              {chartData[chartData.length - 1].rsi!.toFixed(1)}
             </span>
           </div>
           <div className="flex gap-4">

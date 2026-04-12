@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { calculateDCF } from "@/lib/dcf";
 
 interface SensitivityTableProps {
@@ -11,7 +11,7 @@ interface SensitivityTableProps {
   currency: string;
 }
 
-export const SensitivityTable: React.FC<SensitivityTableProps> = ({
+export const SensitivityTable: React.FC<SensitivityTableProps> = React.memo(({
   fcf,
   sharesOutstanding,
   terminalGrowth,
@@ -20,8 +20,17 @@ export const SensitivityTable: React.FC<SensitivityTableProps> = ({
   growthRate,
   currency,
 }) => {
-  const waccRange = [wacc - 2, wacc - 1, wacc, wacc + 1, wacc + 2].filter(v => v > 0);
-  const growthRange = [growthRate - 2, growthRate - 1, growthRate, growthRate + 1, growthRate + 2];
+  const waccRange = useMemo(() => [wacc - 2, wacc - 1, wacc, wacc + 1, wacc + 2].filter(v => v > 0), [wacc]);
+  const growthRange = useMemo(() => [growthRate - 2, growthRate - 1, growthRate, growthRate + 1, growthRate + 2], [growthRate]);
+
+  const gridValues = useMemo(() => {
+    return growthRange.map((g) =>
+      waccRange.map((w) => {
+        const result = calculateDCF(fcf, g, terminalGrowth, w, years, sharesOutstanding);
+        return result.valuePerShare;
+      })
+    );
+  }, [fcf, sharesOutstanding, terminalGrowth, years, waccRange, growthRange]);
 
   return (
     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
@@ -38,13 +47,13 @@ export const SensitivityTable: React.FC<SensitivityTableProps> = ({
           </tr>
         </thead>
         <tbody>
-          {growthRange.map((g) => (
+          {growthRange.map((g, gIdx) => (
             <tr key={g}>
               <td className="p-2 border-r bg-slate-50 font-bold text-blue-600">
                 {g.toFixed(1)}%
               </td>
-              {waccRange.map((w) => {
-                const result = calculateDCF(fcf, g, terminalGrowth, w, years, sharesOutstanding);
+              {waccRange.map((w, wIdx) => {
+                const value = gridValues[gIdx][wIdx];
                 const isCurrent = g === growthRate && w === wacc;
                 return (
                   <td
@@ -53,7 +62,7 @@ export const SensitivityTable: React.FC<SensitivityTableProps> = ({
                       isCurrent ? "bg-blue-50 font-bold ring-2 ring-blue-500 ring-inset" : ""
                     }`}
                   >
-                    {currency} {result.valuePerShare.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                    {currency} {value.toLocaleString(undefined, { maximumFractionDigits: 1 })}
                   </td>
                 );
               })}
@@ -66,4 +75,6 @@ export const SensitivityTable: React.FC<SensitivityTableProps> = ({
       </p>
     </div>
   );
-};
+});
+
+SensitivityTable.displayName = "SensitivityTable";

@@ -50,6 +50,29 @@ interface DCFResult {
   terminalValue: number;
   presentValue: number;
   presentTerminalValue: number;
+  error: string | null;
+}
+
+// Extract the last JSON object from AI response text (handles explanatory text around JSON)
+function extractJSON(text: string): string | null {
+  // Try markdown code fence first
+  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenceMatch) {
+    const trimmed = fenceMatch[1].trim();
+    try { JSON.parse(trimmed); return trimmed; } catch { /* fall through */ }
+  }
+  // Find the last complete top-level JSON object by scanning for balanced braces
+  let depth = 0;
+  let lastEnd = -1;
+  let lastStart = -1;
+  for (let i = text.length - 1; i >= 0; i--) {
+    if (text[i] === '}') { if (depth === 0) lastEnd = i; depth++; }
+    else if (text[i] === '{') { depth--; if (depth === 0 && lastEnd !== -1) { lastStart = i; break; } }
+  }
+  if (lastStart !== -1 && lastEnd !== -1) {
+    return text.slice(lastStart, lastEnd + 1);
+  }
+  return null;
 }
 
 export default function Home() {
@@ -96,7 +119,8 @@ export default function Home() {
     setMounted(true);
     if (isSupabaseConfigured) {
       supabase.auth.getUser().then(({ data: { user } }) => setUser(user));
-      supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
+      return () => subscription.unsubscribe();
     }
   }, []);
 
@@ -286,9 +310,9 @@ export default function Home() {
 
       if (type === "all-in-one") {
         try {
-          const jsonMatch = data.text.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            const allData = JSON.parse(jsonMatch[0]);
+          const jsonStr = extractJSON(data.text);
+          if (jsonStr) {
+            const allData = JSON.parse(jsonStr);
             
             // 1. Handle DCF Parameters
             if (allData.dcf) {
@@ -340,8 +364,8 @@ export default function Home() {
 
       if (type === "resolve-ticker") {
         try {
-          const jsonMatch = data.text.match(/\{[\s\S]*\}/);
-          const resolution = JSON.parse(jsonMatch ? jsonMatch[0] : data.text);
+          const jsonStr = extractJSON(data.text);
+          const resolution = JSON.parse(jsonStr || data.text);
           return resolution;
         } catch (e) {
           console.error("Failed to parse resolution", e);
@@ -365,10 +389,10 @@ export default function Home() {
       }
 
       if (type === "combined" || type === "research") {
-        const jsonMatch = data.text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
+        const jsonStr = extractJSON(data.text);
+        if (jsonStr) {
           try {
-            const params = JSON.parse(jsonMatch[0]);
+            const params = JSON.parse(jsonStr);
             if (params.fcf) setFcf(params.fcf);
             if (params.wacc) {
               setWacc(params.wacc);
@@ -666,6 +690,14 @@ export default function Home() {
           </div>
 
           <div className="lg:col-span-2 space-y-6">
+            {dcfResult?.error && (
+              <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg flex items-center gap-3 shadow-sm">
+                <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
+                <div className="text-sm">
+                  <span className="font-bold">Invalid Parameters:</span> {dcfResult.error}. Please adjust the WACC or Terminal Growth Rate sliders.
+                </div>
+              </div>
+            )}
             <div ref={reportRef} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
