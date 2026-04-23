@@ -1,27 +1,16 @@
-import React, { useState, useEffect } from "react";
+"use client";
+
+import React, { useState } from "react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth-context";
 import { User, LogIn, LogOut, Mail, Loader2, AlertTriangle, KeyRound } from "lucide-react";
 
 export const AuthUI = () => {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
-  const [user, setUser] = useState<any>(null);
   const [showOtpInput, setShowOtpInput] = useState(false);
-
-  useEffect(() => {
-    if (!isSupabaseConfigured) return;
-
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUser(user);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
 
   if (!isSupabaseConfigured) {
     return (
@@ -35,19 +24,14 @@ export const AuthUI = () => {
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    
+
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: {
-        shouldCreateUser: true,
-      },
+      options: { shouldCreateUser: true },
     });
 
-    if (error) {
-      alert(error.message);
-    } else {
-      setShowOtpInput(true);
-    }
+    if (error) alert(error.message);
+    else setShowOtpInput(true);
     setLoading(false);
   };
 
@@ -58,7 +42,7 @@ export const AuthUI = () => {
     const { error } = await supabase.auth.verifyOtp({
       email,
       token: otp,
-      type: 'email'
+      type: "email",
     });
 
     if (error) {
@@ -87,7 +71,7 @@ export const AuthUI = () => {
             {user.email}
           </span>
         </div>
-        <button 
+        <button
           onClick={handleLogout}
           className="p-1 hover:bg-slate-50 rounded-full transition-colors text-slate-400 hover:text-red-500"
           title="Sign Out"

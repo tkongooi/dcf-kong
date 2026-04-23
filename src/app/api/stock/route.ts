@@ -17,7 +17,9 @@ export async function GET(request: Request) {
       quote = await yahooFinance.quote(tickerParam);
     } catch (e) {
       const searchRes = await yahooFinance.search(tickerParam);
-      const bestMatch = searchRes.quotes.find((q: any) => q.quoteType === 'EQUITY');
+      const bestMatch = searchRes.quotes.find(
+        (q) => (q as { quoteType?: string }).quoteType === 'EQUITY'
+      ) as { symbol?: string } | undefined;
       if (bestMatch && typeof bestMatch.symbol === 'string') {
         quote = await yahooFinance.quote(bestMatch.symbol);
       } else {
@@ -26,25 +28,29 @@ export async function GET(request: Request) {
     }
 
     const ticker = quote.symbol;
-    
-    // Exhaustive list of modules to find ANY financial data
-    const summaryRes = await yahooFinance.quoteSummary(ticker, { 
-      modules: [
-        'summaryProfile', 
-        'cashflowStatementHistory', 
-        'cashflowStatementHistoryQuarterly', 
-        'incomeStatementHistory',
-        'incomeStatementHistoryQuarterly',
-        'summaryDetail', 
-        'defaultKeyStatistics',
-        'financialData'
-      ] 
-    });
+
+    const [summaryRes, chartRes] = await Promise.all([
+      yahooFinance.quoteSummary(ticker, {
+        modules: [
+          'summaryProfile',
+          'cashflowStatementHistory',
+          'cashflowStatementHistoryQuarterly',
+          'incomeStatementHistory',
+          'incomeStatementHistoryQuarterly',
+          'summaryDetail',
+          'defaultKeyStatistics',
+          'financialData',
+        ],
+      }),
+      yahooFinance.chart(ticker, {
+        period1: new Date(new Date().setFullYear(new Date().getFullYear() - 5)),
+        interval: '1mo',
+      }),
+    ]);
 
     const stats = summaryRes.defaultKeyStatistics;
     const finData = summaryRes.financialData;
-    
-    // Pick best cash flow module
+
     let cashFlowModule = summaryRes.cashflowStatementHistory;
     let isQuarterly = false;
 
@@ -52,22 +58,18 @@ export async function GET(request: Request) {
       cashFlowModule = summaryRes.cashflowStatementHistoryQuarterly;
       isQuarterly = true;
     }
-    
-    const chartRes = await yahooFinance.chart(ticker, { 
-      period1: new Date(new Date().setFullYear(new Date().getFullYear() - 5)),
-      interval: '1mo' 
-    });
 
-    // IMPROVED: Case-insensitive deep scanner for property values
-    const getVal = (obj: any, patterns: string[]) => {
+    const getVal = (obj: Record<string, unknown> | null | undefined, patterns: string[]): number => {
       if (!obj) return 0;
       const keys = Object.keys(obj);
       for (const pattern of patterns) {
-        // Match exact or contains pattern (case-insensitive)
         const foundKey = keys.find(k => k.toLowerCase().includes(pattern.toLowerCase()));
-        if (foundKey && (obj[foundKey]?.raw !== undefined || typeof obj[foundKey] === 'number')) {
-          return obj[foundKey]?.raw ?? obj[foundKey];
+        if (!foundKey) continue;
+        const raw = obj[foundKey];
+        if (raw && typeof raw === 'object' && 'raw' in raw && typeof (raw as { raw: unknown }).raw === 'number') {
+          return (raw as { raw: number }).raw;
         }
+        if (typeof raw === 'number') return raw;
       }
       return 0;
     };
@@ -75,30 +77,38 @@ export async function GET(request: Request) {
     const ocfPatterns = ['totalCashFromOperating', 'operatingCashflow', 'cashFromOperating', 'netCashProvidedByOperating'];
     const capexPatterns = ['capitalExpenditure', 'capex', 'additionsToPropertyPlantAndEquipment'];
 
-    const historicalFCF = (cashFlowModule?.cashflowStatements || []).slice(0, 5).map((stmt: any) => {
-      const ocf = getVal(stmt, ocfPatterns);
-      const capex = getVal(stmt, capexPatterns);
-      
+    // Yahoo reports capex as a negative number, so FCF = OCF + capex.
+    const historicalFCF = (cashFlowModule?.cashflowStatements || []).slice(0, 5).map((stmt) => {
+      const stmtRecord = stmt as unknown as Record<string, unknown>;
+      const ocf = getVal(stmtRecord, ocfPatterns);
+      const capex = getVal(stmtRecord, capexPatterns);
+      const endDate = stmtRecord.endDate;
       return {
-        date: stmt.endDate ? new Date(stmt.endDate).toISOString().split('T')[0] : 'N/A',
+        date: endDate instanceof Date ? endDate.toISOString().split('T')[0] : 'N/A',
         fcf: (ocf + capex) / 1e9,
         ocf: ocf / 1e9,
         capex: capex / 1e9,
-        isQuarterly
+        isQuarterly,
       };
-    }).filter((item: any) => item.date !== 'N/A' && (item.ocf !== 0 || item.capex !== 0));
+    }).filter((item) => item.date !== 'N/A' && (item.ocf !== 0 || item.capex !== 0));
 
-    // Determine current FCF
-    let currentFCF = null;
+    let currentFCF: number | null = null;
     if (historicalFCF.length > 0) {
       currentFCF = historicalFCF[0].fcf;
     } else if (finData?.freeCashflow) {
       currentFCF = finData.freeCashflow / 1e9;
     } else if (finData?.operatingCashflow) {
-      currentFCF = (finData.operatingCashflow * 0.9) / 1e9; // 10% capex estimate fallback
+      currentFCF = (finData.operatingCashflow * 0.9) / 1e9;
     }
 
-    const data = {
+    const history = (chartRes.quotes || [])
+      .filter((q) => q?.date instanceof Date && q.close != null)
+      .map((q) => ({
+        date: (q.date as Date).toISOString().split('T')[0],
+        price: q.close as number,
+      }));
+
+    const data: Record<string, unknown> = {
       symbol: quote.symbol,
       price: quote.regularMarketPrice,
       currency: quote.currency,
@@ -111,30 +121,28 @@ export async function GET(request: Request) {
       priceToSales: summaryRes.summaryDetail?.priceToSalesTrailing12Months || quote.priceToSales || null,
       dividendYield: summaryRes.summaryDetail?.dividendYield ? summaryRes.summaryDetail.dividendYield * 100 : (quote.dividendYield || null),
       beta: summaryRes.summaryDetail?.beta || stats?.beta || null,
-      totalCash: finData?.totalCash ? finData.totalCash / 1e9 : (stats?.totalCash ? (stats.totalCash as any) / 1e9 : 0),
-      totalDebt: finData?.totalDebt ? finData.totalDebt / 1e9 : (stats?.totalDebt ? (stats.totalDebt as any) / 1e9 : 0),
-      // Financial Ratios
-      returnOnEquity: finData?.returnOnEquity ? (finData.returnOnEquity as any) * 100 : (stats?.returnOnEquity ? (stats.returnOnEquity as any) * 100 : null),
-      returnOnAssets: finData?.returnOnAssets ? (finData.returnOnAssets as any) * 100 : (stats?.returnOnAssets ? (stats.returnOnAssets as any) * 100 : null),
+      totalCash: finData?.totalCash ? finData.totalCash / 1e9 : (stats?.totalCash ? (stats.totalCash as number) / 1e9 : 0),
+      totalDebt: finData?.totalDebt ? finData.totalDebt / 1e9 : (stats?.totalDebt ? (stats.totalDebt as number) / 1e9 : 0),
+      returnOnEquity: finData?.returnOnEquity ? (finData.returnOnEquity as number) * 100 : (stats?.returnOnEquity ? (stats.returnOnEquity as number) * 100 : null),
+      returnOnAssets: finData?.returnOnAssets ? (finData.returnOnAssets as number) * 100 : (stats?.returnOnAssets ? (stats.returnOnAssets as number) * 100 : null),
       debtToEquity: finData?.debtToEquity || stats?.debtToEquity || null,
       currentRatio: finData?.currentRatio || stats?.currentRatio || null,
-      operatingMargins: finData?.operatingMargins ? (finData.operatingMargins as any) * 100 : (stats?.operatingMargins ? (stats.operatingMargins as any) * 100 : null),
+      operatingMargins: finData?.operatingMargins ? (finData.operatingMargins as number) * 100 : (stats?.operatingMargins ? (stats.operatingMargins as number) * 100 : null),
       freeCashFlow: currentFCF,
       historicalFCF,
       sector: summaryRes.summaryProfile?.sector,
       industry: summaryRes.summaryProfile?.industry,
-      history: chartRes.quotes.map((q: any) => ({
-        date: q.date.toISOString().split('T')[0],
-        price: q.close
-      })).filter((q: any) => q.price !== null),
-      // Debug info to see what modules were actually returned
-      debug: {
+      history,
+    };
+
+    if (process.env.NODE_ENV !== 'production') {
+      data.debug = {
         hasCashFlowYearly: !!summaryRes.cashflowStatementHistory?.cashflowStatements?.length,
         hasCashFlowQuarterly: !!summaryRes.cashflowStatementHistoryQuarterly?.cashflowStatements?.length,
         hasFinData: !!summaryRes.financialData,
-        availableModules: Object.keys(summaryRes)
-      }
-    };
+        availableModules: Object.keys(summaryRes),
+      };
+    }
 
     return NextResponse.json(data);
   } catch (error: unknown) {

@@ -1,15 +1,16 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import * as Slider from "@radix-ui/react-slider";
-import { Search, Info, TrendingUp, AlertCircle, MessageSquare, Loader2, Download, Zap, MinusCircle, PlusCircle, Save, History, Trash2, ShieldAlert, BarChart3, Users } from "lucide-react";
-import { calculateDCF } from "@/lib/dcf";
+import { Search, Info, TrendingUp, AlertCircle, MessageSquare, Loader2, Download, Zap, MinusCircle, PlusCircle, Save, History, Trash2, ShieldAlert, BarChart3 } from "lucide-react";
+import { calculateDCF, DCFResult } from "@/lib/dcf";
 import { SensitivityTable } from "@/components/SensitivityTable";
 import { StockPriceChart } from "@/components/StockPriceChart";
 import { HistoricalFCFChart } from "@/components/HistoricalFCFChart";
 import { PeerComparisonTable } from "@/components/PeerComparisonTable";
 import { AuthUI } from "@/components/Auth";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth-context";
 import { toPng } from "html-to-image";
 import jsPDF from "jspdf";
 
@@ -40,28 +41,60 @@ interface StockData {
   history: { date: string; price: number }[];
 }
 
-interface DCFResult {
-  enterpriseValue: number;
-  equityValue: number;
-  netDebt: number;
-  valuePerShare: number;
-  projectedFCF: number[];
-  annualGrowthRates: number[];
-  terminalValue: number;
-  presentValue: number;
-  presentTerminalValue: number;
-  error: string | null;
+interface Peer {
+  symbol: string;
+  shortName: string;
+  price: number;
+  currency: string;
+  peRatio: number | null;
+  forwardPE: number | null;
+  priceToSales: number | null;
+  priceToBook: number | null;
+  dividendYield: number | null;
+  marketCap: number;
 }
 
-// Extract the last JSON object from AI response text (handles explanatory text around JSON)
+interface SavedAnalysis {
+  id: string;
+  user_id: string;
+  ticker: string;
+  company_name: string | null;
+  fcf: number;
+  wacc: number;
+  growth_rate: number;
+  terminal_growth: number;
+  years: number;
+  transition_years: number | null;
+  total_cash: number | null;
+  total_debt: number | null;
+  shares: number;
+  created_at: string;
+}
+
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface AiDcfParams {
+  fcf?: number;
+  wacc?: number;
+  growthRate?: number;
+  terminalGrowth?: number;
+  years?: number;
+  transitionYears?: number;
+  historicalFCF?: { date: string; fcf: number }[];
+  reasoning?: string;
+}
+
+type ChatType = "chat" | "research" | "commentary" | "combined" | "peers" | "resolve-ticker" | "all-in-one";
+
 function extractJSON(text: string): string | null {
-  // Try markdown code fence first
   const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenceMatch) {
     const trimmed = fenceMatch[1].trim();
     try { JSON.parse(trimmed); return trimmed; } catch { /* fall through */ }
   }
-  // Find the last complete top-level JSON object by scanning for balanced braces
   let depth = 0;
   let lastEnd = -1;
   let lastStart = -1;
@@ -76,13 +109,14 @@ function extractJSON(text: string): string | null {
 }
 
 export default function Home() {
+  const { user } = useAuth();
+
   const [ticker, setTicker] = useState("");
   const [stockData, setStockData] = useState<StockData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const reportRef = useRef<HTMLDivElement>(null);
 
-  // DCF Parameters
   const [fcf, setFcf] = useState(0);
   const [wacc, setWacc] = useState(10);
   const [growthRate, setGrowthRate] = useState(5);
@@ -93,52 +127,71 @@ export default function Home() {
   const [totalCash, setTotalCash] = useState(0);
   const [totalDebt, setTotalDebt] = useState(0);
 
-  // Peer State
-  const [peers, setPeers] = useState<any[]>([]);
+  const [peers, setPeers] = useState<Peer[]>([]);
   const [peersLoading, setPeersLoading] = useState(false);
 
-  // Scenario Base Values
   const [baseParams, setBaseParams] = useState({ wacc: 10, growthRate: 5 });
 
   const [dcfResult, setDcfResult] = useState<DCFResult | null>(null);
 
-  // Auth & Saved Data
-  const [user, setUser] = useState<any>(null);
-  const [savedAnalyses, setSavedAnalyses] = useState<any[]>([]);
+  const [savedAnalyses, setSavedAnalyses] = useState<SavedAnalysis[]>([]);
   const [saveLoading, setSaveLoading] = useState(false);
 
-  // AI State
-  const [messages, setMessages] = useState<{ role: string; content: string }[]>([
+  const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "assistant", content: "Hello! Search for a stock ticker to start our analysis. I can help you research initial DCF parameters and discuss the company's fundamentals." }
   ]);
   const [chatInput, setChatInput] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
 
+  const stockAbortRef = useRef<AbortController | null>(null);
+  const chatAbortRef = useRef<AbortController | null>(null);
+
   useEffect(() => {
     setMounted(true);
-    if (isSupabaseConfigured) {
-      supabase.auth.getUser().then(({ data: { user } }) => setUser(user));
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
-      return () => subscription.unsubscribe();
-    }
   }, []);
 
-  useEffect(() => {
-    if (user && isSupabaseConfigured) fetchSavedAnalyses();
-    else setSavedAnalyses([]);
-  }, [user]);
-
-  const fetchSavedAnalyses = async () => {
+  const fetchSavedAnalyses = useCallback(async (uid: string) => {
     if (!isSupabaseConfigured) return;
     const { data, error } = await supabase
       .from("analyses")
       .select("*")
+      .eq("user_id", uid)
       .order("created_at", { ascending: false });
-    
-    if (data) setSavedAnalyses(data);
+
+    if (data) setSavedAnalyses(data as SavedAnalysis[]);
     if (error) console.error("Error fetching saved analyses:", error);
-  };
+  }, []);
+
+  useEffect(() => {
+    if (user && isSupabaseConfigured) fetchSavedAnalyses(user.id);
+    else setSavedAnalyses([]);
+  }, [user, fetchSavedAnalyses]);
+
+  const applyDcfParams = useCallback((params: AiDcfParams) => {
+    if (typeof params.fcf === "number") setFcf(params.fcf);
+    if (typeof params.wacc === "number") {
+      setWacc(params.wacc);
+      setBaseParams(prev => ({ ...prev, wacc: params.wacc as number }));
+    }
+    if (typeof params.growthRate === "number") {
+      setGrowthRate(params.growthRate);
+      setBaseParams(prev => ({ ...prev, growthRate: params.growthRate as number }));
+    }
+    if (typeof params.terminalGrowth === "number") setTerminalGrowth(params.terminalGrowth);
+    if (typeof params.years === "number") setYears(params.years);
+    if (typeof params.transitionYears === "number") setTransitionYears(params.transitionYears);
+
+    if (params.historicalFCF && params.historicalFCF.length > 0) {
+      setStockData(prev => {
+        if (!prev) return null;
+        if (!prev.historicalFCF || prev.historicalFCF.length === 0) {
+          return { ...prev, historicalFCF: params.historicalFCF! };
+        }
+        return prev;
+      });
+    }
+  }, []);
 
   const saveAnalysis = async () => {
     if (!isSupabaseConfigured) return alert("Database not configured. Set Supabase keys in .env.local");
@@ -163,13 +216,13 @@ export default function Home() {
 
     if (error) alert(error.message);
     else {
-      fetchSavedAnalyses();
+      await fetchSavedAnalyses(user.id);
       alert("Analysis saved successfully!");
     }
     setSaveLoading(false);
   };
 
-  const loadAnalysis = (item: any) => {
+  const loadAnalysis = (item: SavedAnalysis) => {
     setTicker(item.ticker);
     setFcf(item.fcf);
     setWacc(item.wacc);
@@ -185,9 +238,13 @@ export default function Home() {
 
   const deleteAnalysis = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!isSupabaseConfigured) return;
-    const { error } = await supabase.from("analyses").delete().eq("id", id);
-    if (!error) fetchSavedAnalyses();
+    if (!isSupabaseConfigured || !user) return;
+    const { error } = await supabase
+      .from("analyses")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id);
+    if (!error) fetchSavedAnalyses(user.id);
   };
 
   const setScenario = (type: "bear" | "base" | "bull") => {
@@ -215,8 +272,18 @@ export default function Home() {
       const pdf = new jsPDF("p", "mm", "a4");
       const imgProps = pdf.getImageProperties(dataUrl);
       const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
       const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-      pdf.addImage(dataUrl, "PNG", 0, 0, pdfWidth, pdfHeight);
+
+      // Slice the tall image across multiple A4 pages using negative Y offsets.
+      let remaining = pdfHeight;
+      let pageIndex = 0;
+      while (remaining > 0) {
+        if (pageIndex > 0) pdf.addPage();
+        pdf.addImage(dataUrl, "PNG", 0, -pageIndex * pageHeight, pdfWidth, pdfHeight);
+        remaining -= pageHeight;
+        pageIndex += 1;
+      }
       pdf.save(`${ticker || "stock"}-dcf-analysis.pdf`);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "PDF generation failed";
@@ -229,25 +296,27 @@ export default function Home() {
   const fetchStockData = async (activeTickerParam?: string, skipAi?: boolean) => {
     let activeTicker = (activeTickerParam || ticker).trim();
     if (!activeTicker) return;
-    
+
+    stockAbortRef.current?.abort();
+    const controller = new AbortController();
+    stockAbortRef.current = controller;
+
     setLoading(true);
     setError("");
     setPeers([]);
 
     try {
-      // 1. Try direct fetch first (standard ticker path)
-      let res = await fetch(`/api/stock?ticker=${activeTicker}`);
+      let res = await fetch(`/api/stock?ticker=${encodeURIComponent(activeTicker)}`, { signal: controller.signal });
       let data = await res.json();
 
-      // 2. If direct fetch fails, try to resolve via AI
       if (data.error) {
         const resolution = await handleGeminiChat(activeTicker, "resolve-ticker");
-        
+
         if (resolution && resolution.ticker && resolution.confidence === "high") {
           activeTicker = resolution.ticker;
-          setTicker(activeTicker); 
-          
-          res = await fetch(`/api/stock?ticker=${activeTicker}`);
+          setTicker(activeTicker);
+
+          res = await fetch(`/api/stock?ticker=${encodeURIComponent(activeTicker)}`, { signal: controller.signal });
           data = await res.json();
           if (data.error) throw new Error(data.error);
         } else if (resolution && resolution.suggestions && resolution.suggestions.length > 0) {
@@ -257,24 +326,23 @@ export default function Home() {
           throw new Error(`Could not find a stock ticker for "${activeTicker}".`);
         }
       }
-      
+
+      if (controller.signal.aborted) return;
+
       setStockData(data);
-      
-      // Update parameters
+
       if (data.freeCashFlow !== null && data.freeCashFlow !== undefined) {
         setFcf(data.freeCashFlow);
       }
-      if (data.sharesOutstanding) {
-        setSharesOutstanding(data.sharesOutstanding);
-      }
+      if (data.sharesOutstanding) setSharesOutstanding(data.sharesOutstanding);
       if (data.totalCash !== undefined) setTotalCash(data.totalCash);
       if (data.totalDebt !== undefined) setTotalDebt(data.totalDebt);
 
       if (!skipAi) {
-        // Reduced to a single all-in-one AI call
         handleGeminiChat(`Comprehensive research for ${data.symbol}`, "all-in-one", data.symbol);
       }
     } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
       setError(errorMessage);
     } finally {
@@ -282,30 +350,43 @@ export default function Home() {
     }
   };
 
-  const handleGeminiChat = async (input: string, type: "chat" | "research" | "commentary" | "combined" | "peers" | "resolve-ticker" | "all-in-one" = "chat", overrideTicker?: string) => {
+  const handleGeminiChat = async (
+    input: string,
+    type: ChatType = "chat",
+    overrideTicker?: string
+  ): Promise<{ ticker?: string; confidence?: string; suggestions?: string[] } | undefined> => {
     const currentTicker = overrideTicker || ticker;
     if (!currentTicker && type !== "chat") return;
-    
+
     if (type === "chat") {
       setMessages(prev => [...prev, { role: "user", content: input }]);
     }
-    
-    if (type === "peers" || type === "resolve-ticker" || type === "all-in-one") setPeersLoading(true);
+
+    const isPeerLike = type === "peers" || type === "resolve-ticker" || type === "all-in-one";
+    if (isPeerLike) setPeersLoading(true);
     else setAiLoading(true);
 
+    chatAbortRef.current?.abort();
+    const controller = new AbortController();
+    chatAbortRef.current = controller;
+
     try {
+      // Only send chat-visible messages as history so raw JSON blobs don't balloon the prompt.
+      const historyForApi = type === "chat" ? messages : [];
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          ticker: currentTicker, 
-          type, 
+        signal: controller.signal,
+        body: JSON.stringify({
+          ticker: currentTicker,
+          type,
           context: input,
-          history: messages 
+          history: historyForApi,
         }),
       });
       const data = await res.json();
-      
+
       if (data.error) throw new Error(data.error);
 
       if (type === "all-in-one") {
@@ -313,63 +394,39 @@ export default function Home() {
           const jsonStr = extractJSON(data.text);
           if (jsonStr) {
             const allData = JSON.parse(jsonStr);
-            
-            // 1. Handle DCF Parameters
-            if (allData.dcf) {
-              const params = allData.dcf;
-              if (params.fcf) setFcf(params.fcf);
-              if (params.wacc) {
-                setWacc(params.wacc);
-                setBaseParams(prev => ({ ...prev, wacc: params.wacc }));
-              }
-              if (params.growthRate) {
-                setGrowthRate(params.growthRate);
-                setBaseParams(prev => ({ ...prev, growthRate: params.growthRate }));
-              }
-              if (params.terminalGrowth) setTerminalGrowth(params.terminalGrowth);
-              if (params.years) setYears(params.years);
-              if (params.transitionYears) setTransitionYears(params.transitionYears);
-              
-              if (params.historicalFCF && params.historicalFCF.length > 0) {
-                setStockData(prev => {
-                  if (!prev) return null;
-                  if (!prev.historicalFCF || prev.historicalFCF.length === 0) {
-                    return { ...prev, historicalFCF: params.historicalFCF };
-                  }
-                  return prev;
-                });
-              }
-            }
 
-            // 2. Handle Peers
+            if (allData.dcf) applyDcfParams(allData.dcf as AiDcfParams);
+
             if (allData.peers && Array.isArray(allData.peers)) {
               const tickersToFetch = Array.from(new Set([currentTicker, ...allData.peers])).join(",");
-              const peersRes = await fetch(`/api/stocks?tickers=${tickersToFetch}`);
-              const peersData = await peersRes.json();
-              setPeers(peersData);
+              const peersRes = await fetch(`/api/stocks?tickers=${encodeURIComponent(tickersToFetch)}`, { signal: controller.signal });
+              const peersJson = await peersRes.json();
+              if (Array.isArray(peersJson.peers)) {
+                setPeers(peersJson.peers);
+                if (Array.isArray(peersJson.failed) && peersJson.failed.length > 0) {
+                  console.warn("Peer fetch failed for:", peersJson.failed);
+                }
+              }
             }
 
-            // 3. Handle Analysis/Chat
-            if (allData.analysis) {
-              setMessages(prev => [...prev, { role: "assistant", content: allData.analysis }]);
-            } else {
-              // Fallback to full text if structured analysis missing
-              setMessages(prev => [...prev, { role: "assistant", content: data.text }]);
-            }
+            const analysisText = typeof allData.analysis === "string" && allData.analysis.trim()
+              ? allData.analysis
+              : data.text;
+            setMessages(prev => [...prev, { role: "assistant", content: analysisText }]);
           }
         } catch (e) {
           console.error("Failed to parse all-in-one data", e);
         }
+        return;
       }
 
       if (type === "resolve-ticker") {
         try {
           const jsonStr = extractJSON(data.text);
-          const resolution = JSON.parse(jsonStr || data.text);
-          return resolution;
+          return JSON.parse(jsonStr || data.text);
         } catch (e) {
           console.error("Failed to parse resolution", e);
-          return null;
+          return undefined;
         }
       }
 
@@ -377,53 +434,37 @@ export default function Home() {
         try {
           const peerTickers = JSON.parse(data.text);
           if (Array.isArray(peerTickers)) {
-            // Fetch metrics for peers + main stock
             const tickersToFetch = Array.from(new Set([currentTicker, ...peerTickers])).join(",");
-            const peersRes = await fetch(`/api/stocks?tickers=${tickersToFetch}`);
-            const peersData = await peersRes.json();
-            setPeers(peersData);
+            const peersRes = await fetch(`/api/stocks?tickers=${encodeURIComponent(tickersToFetch)}`, { signal: controller.signal });
+            const peersJson = await peersRes.json();
+            if (Array.isArray(peersJson.peers)) setPeers(peersJson.peers);
           }
         } catch (e) {
           console.error("Failed to parse or fetch peers", e);
         }
+        return;
       }
 
       if (type === "combined" || type === "research") {
         const jsonStr = extractJSON(data.text);
         if (jsonStr) {
           try {
-            const params = JSON.parse(jsonStr);
-            if (params.fcf) setFcf(params.fcf);
-            if (params.wacc) {
-              setWacc(params.wacc);
-              setBaseParams(prev => ({ ...prev, wacc: params.wacc }));
-            }
-            if (params.growthRate) {
-              setGrowthRate(params.growthRate);
-              setBaseParams(prev => ({ ...prev, growthRate: params.growthRate }));
-            }
-            if (params.terminalGrowth) setTerminalGrowth(params.terminalGrowth);
-            if (params.years) setYears(params.years);
-            
-            // AI DATA RECOVERY: If Yahoo failed to provide historical FCF, use AI data
-            if (params.historicalFCF && params.historicalFCF.length > 0) {
-              setStockData(prev => {
-                if (!prev) return null;
-                // Only use AI data if Yahoo data is empty
-                if (!prev.historicalFCF || prev.historicalFCF.length === 0) {
-                  return { ...prev, historicalFCF: params.historicalFCF };
-                }
-                return prev;
-              });
+            const params = JSON.parse(jsonStr) as AiDcfParams;
+            applyDcfParams(params);
+            if (params.reasoning) {
+              setMessages(prev => [...prev, { role: "assistant", content: params.reasoning! }]);
             }
           } catch (e) {
             console.error("Failed to parse AI parameters", e);
           }
         }
+        return;
       }
 
+      // Default: free-form chat — append the assistant reply.
       setMessages(prev => [...prev, { role: "assistant", content: data.text }]);
     } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
       setMessages(prev => [...prev, { role: "assistant", content: `Error: ${errorMessage}. Please ensure GEMINI_API_KEY is set in your environment.` }]);
     } finally {
@@ -434,7 +475,7 @@ export default function Home() {
   };
 
   useEffect(() => {
-    if (fcf !== 0 && sharesOutstanding > 0) {
+    if (sharesOutstanding > 0) {
       const result = calculateDCF(fcf, growthRate, terminalGrowth, wacc, years, sharesOutstanding, transitionYears, totalCash, totalDebt);
       setDcfResult(result);
     }
@@ -472,7 +513,7 @@ export default function Home() {
               Intrinsic value estimation for global stocks, created by <span className="font-semibold text-slate-700">Kong Ooi Tan</span>
             </p>
           </div>
-          
+
           <div className="flex flex-col md:flex-row items-end md:items-center gap-4">
             {aiLoading && (
               <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-full text-xs font-semibold animate-pulse border border-blue-100 shadow-sm whitespace-nowrap">
@@ -528,7 +569,7 @@ export default function Home() {
                   Parameters
                 </h2>
                 {isSupabaseConfigured && user && ticker && (
-                  <button 
+                  <button
                     onClick={saveAnalysis}
                     disabled={saveLoading}
                     className="flex items-center gap-2 text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors"
@@ -656,7 +697,7 @@ export default function Home() {
                 </h3>
                 <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
                   {savedAnalyses.map((item) => (
-                    <div 
+                    <div
                       key={item.id}
                       onClick={() => loadAnalysis(item)}
                       className="p-3 rounded-lg border border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 cursor-pointer transition-all group"
@@ -671,7 +712,7 @@ export default function Home() {
                           </p>
                           <p className="text-[10px] text-slate-400 mt-1">{new Date(item.created_at).toLocaleDateString()}</p>
                         </div>
-                        <button 
+                        <button
                           onClick={(e) => deleteAnalysis(item.id, e)}
                           className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-red-50 text-slate-300 hover:text-red-500 rounded-md transition-all"
                         >
@@ -714,7 +755,7 @@ export default function Home() {
                 </div>
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
                   <p className="text-sm font-medium text-slate-500 mb-1">Company Info</p>
-                  <h3 
+                  <h3
                     className="text-2xl sm:text-3xl xl:text-4xl font-bold text-slate-900 mb-2 leading-tight line-clamp-2"
                     title={stockData ? (stockData.shortName || "") : "No Data"}
                   >
@@ -761,7 +802,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Financial Ratios Section */}
               <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200/60 grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className="space-y-1">
                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider leading-none">ROE</p>
@@ -786,10 +826,10 @@ export default function Home() {
               </div>
 
               {stockData?.history && dcfResult && (
-                <StockPriceChart 
-                  history={stockData.history} 
-                  intrinsicValue={dcfResult.valuePerShare} 
-                  ticker={stockData.symbol} 
+                <StockPriceChart
+                  history={stockData.history}
+                  intrinsicValue={dcfResult.valuePerShare}
+                  ticker={stockData.symbol}
                 />
               )}
 
@@ -809,13 +849,13 @@ export default function Home() {
 
                 {stockData?.historicalFCF && stockData.historicalFCF.length > 0 ? (
                   <div className="space-y-6">
-                    <HistoricalFCFChart 
-                      data={stockData.historicalFCF} 
-                      projections={dcfResult?.projectedFCF} 
+                    <HistoricalFCFChart
+                      data={stockData.historicalFCF}
+                      projections={dcfResult?.projectedFCF}
                       growthRates={dcfResult?.annualGrowthRates}
                       initialYears={years}
                     />
-                    
+
                     {dcfResult && (
                       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
                         <h3 className="text-lg font-semibold mb-4 text-slate-900">3-Stage Growth Summary</h3>
@@ -841,8 +881,8 @@ export default function Home() {
                               </td>
                               <td className="p-3 border-b text-slate-600">{transitionYears} Years</td>
                               <td className="p-3 border-b text-slate-600 font-semibold">
-                                {transitionYears > 0 
-                                  ? ((growthRate + terminalGrowth) / 2).toFixed(1) 
+                                {transitionYears > 0
+                                  ? ((growthRate + terminalGrowth) / 2).toFixed(1)
                                   : "---"}% (Declining)
                               </td>
                             </tr>

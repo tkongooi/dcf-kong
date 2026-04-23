@@ -60,11 +60,11 @@ export const HistoricalFCFChart: React.FC<HistoricalFCFProps> = ({
             />
             <Tooltip 
               contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-              formatter={(val: any, name: any, props: any) => {
-                const { type, growth } = props.payload;
+              formatter={(val, _name, props) => {
+                const payload = (props as { payload?: { type?: string; growth?: number | null } }).payload ?? {};
                 const valueStr = `${Number(val).toFixed(2)} Billion`;
-                const growthStr = growth !== null ? ` (Growth: ${growth.toFixed(1)}%)` : "";
-                return [`${valueStr}${growthStr}`, type];
+                const growthStr = payload.growth != null ? ` (Growth: ${payload.growth.toFixed(1)}%)` : "";
+                return [`${valueStr}${growthStr}`, payload.type ?? ""];
               }}
             />
             <Legend verticalAlign="top" height={36}/>

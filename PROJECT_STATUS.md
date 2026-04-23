@@ -46,9 +46,25 @@ A professional-grade, fully deployed web application for Discounted Cash Flow (D
     - **Turbopack Compat:** Added empty `turbopack: {}` config to silence Next.js 16 warning from PWA webpack plugin.
     - **Supabase Init:** Cleaned up client initialization with proper `isSupabaseConfigured` gating.
 
+8.  **Code Review Hardening (2026-04-23):**
+    - **Supabase defense-in-depth:** Added `.eq("user_id", user.id)` to `fetchSavedAnalyses` and `deleteAnalysis` so RLS is not the sole access boundary.
+    - **Chat UX:** `handleGeminiChat` restructured with explicit early returns — `peers`, `resolve-ticker`, `all-in-one`, `research`, and `combined` no longer leak raw JSON blobs into the chat panel.
+    - **AI param application:** Extracted `applyDcfParams(params)` using `typeof === "number"` checks instead of truthy — valid `0` values (e.g. `transitionYears: 0`) are now respected.
+    - **DCF recompute:** Dropped the `fcf !== 0` gate; negative/zero FCF now computes so loss-makers render a meaningful intrinsic value.
+    - **PDF pagination:** `downloadPDF` now slices the rendered PNG across A4 pages via negative-Y `addImage` offsets — tall reports no longer clip.
+    - **Race guards:** `AbortController` refs on `fetchStockData` and `handleGeminiChat` cancel in-flight requests on new ticker/chat submissions.
+    - **Prompt sanitation:** `/api/chat` strips `\n\r{}\`` and caps ticker/context length before interpolating into prompts.
+    - **Ticker aliases:** Removed the Geely hardcode from the resolve prompt; moved to a `TICKER_ALIASES` table checked before the AI call.
+    - **Observability:** `/api/stocks` now returns `{ peers, failed }` so the client logs which peers couldn't be fetched. Debug payload in `/api/stock` is gated behind `NODE_ENV !== 'production'`.
+    - **History hygiene:** Chat history is only forwarded when `type === "chat"` — eliminates linear token growth from JSON responses being re-uploaded.
+    - **Auth consolidation:** New `src/lib/auth-context.tsx` (`AuthProvider` + `useAuth`) replaces duplicated `getUser` + `onAuthStateChange` subscriptions that lived in both `page.tsx` and `Auth.tsx`.
+    - **Types:** `DCFResult` and `DcfParams` exported from `src/lib/dcf.ts`. `any` eliminated from `page.tsx` via `Peer`, `SavedAnalysis`, `ChatMessage`, `AiDcfParams`, `ChatType`. Pre-existing `any` usages in chart components also cleaned up.
+    - **A11y:** Dropped `userScalable: false` from viewport.
+
 ### 📍 Next Steps
 1.  **Multi-Scenario Comparison:** Allow users to save and compare Bear, Base, and Bull cases side-by-side.
 2.  **Portfolio Tracking:** Aggregate valuation dashboard for all saved analyses.
+3.  **Explicit "Set as Base" control:** `baseParams` currently only updates on AI research — a manual button would let users anchor bull/bear scenarios around their edited values.
 
 ---
 
@@ -58,4 +74,5 @@ A professional-grade, fully deployed web application for Discounted Cash Flow (D
 - Final Polish Checkpoint: `a5fdb91`
 - Advanced DCF & PWA Checkpoint: `e793993`
 - Financial & Technical Checkpoint: `aa7d490`
-- Bug Fixes & Hardening Checkpoint: `3b627e6` (Latest)
+- Bug Fixes & Hardening Checkpoint: `3b627e6`
+- Code Review Hardening Checkpoint: _pending commit_ (Latest)

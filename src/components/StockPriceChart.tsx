@@ -5,7 +5,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  AreaChart,
   Area,
   ReferenceLine,
   Line,
@@ -54,7 +53,7 @@ export const StockPriceChart: React.FC<StockPriceChartProps> = ({ history, intri
         avgGain = (avgGain * (rsiPeriod - 1) + gain) / rsiPeriod;
         avgLoss = (avgLoss * (rsiPeriod - 1) + loss) / rsiPeriod;
         const rs = avgGain / (avgLoss || 1);
-        (data[i] as any).rsi = 100 - (100 / (1 + rs));
+        data[i].rsi = 100 - (100 / (1 + rs));
       }
     }
 
@@ -121,11 +120,11 @@ export const StockPriceChart: React.FC<StockPriceChartProps> = ({ history, intri
             <Tooltip 
               contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
               labelFormatter={(date) => new Date(date).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })}
-              formatter={(val: any, name: any) => {
+              formatter={(val, name) => {
                 if (name === "price") return [`$${Number(val).toFixed(2)}`, "Price"];
                 if (name === "ma12") return [`$${Number(val).toFixed(2)}`, "MA (12M)"];
                 if (name === "rsi") return [`${Number(val).toFixed(1)}`, "RSI (14)"];
-                return [val, name];
+                return [String(val), String(name)];
               }}
             />
             <Area 
