@@ -90,4 +90,4 @@ A professional-grade, fully deployed web application for Discounted Cash Flow (D
 - Financial & Technical Checkpoint: `aa7d490`
 - Bug Fixes & Hardening Checkpoint: `3b627e6`
 - Code Review Hardening Checkpoint: `94ef228`
-- Claude Design UI Redesign Checkpoint: _pending commit_ (Latest)
+- Claude Design UI Redesign Checkpoint: `956dcc3` (Latest)
