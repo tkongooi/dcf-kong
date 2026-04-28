@@ -61,6 +61,20 @@ A professional-grade, fully deployed web application for Discounted Cash Flow (D
     - **Types:** `DCFResult` and `DcfParams` exported from `src/lib/dcf.ts`. `any` eliminated from `page.tsx` via `Peer`, `SavedAnalysis`, `ChatMessage`, `AiDcfParams`, `ChatType`. Pre-existing `any` usages in chart components also cleaned up.
     - **A11y:** Dropped `userScalable: false` from viewport.
 
+9.  **Claude Design UI Redesign (2026-04-28):**
+    - **Layout overhaul:** Replaced centered `max-w-6xl` Tailwind layout with full-width topbar + 296px left sidebar + scrolling right pane (matches `dcf-kong/project/DCF Kong UI.html` handoff bundle).
+    - **Design tokens:** Migrated `globals.css` to a CSS-variable design system (`--bg`, `--surface`, `--text`, `--blue`, etc.) with a `[data-theme="dark"]` override for full dark-mode swap on `<html>`.
+    - **Sticky valuation header:** New always-visible bar shows Ticker · Market Price · Intrinsic · Upside · MoS bar · TV % · Bear/Base/Bull pills.
+    - **Margin of Safety bar:** Color-coded (red/amber/green) progress bar inside the intrinsic value card, thresholded at 0/15/30%.
+    - **TV % warning:** Auto-fires amber banner when `presentTerminalValue / enterpriseValue > 75%`.
+    - **Scenario range card:** Plots bear / base / bull intrinsic values on a shared axis vs. market price line. Computed from `baseParams` via three additional `useMemo` calls to `calculateDCF`.
+    - **Tooltip explainers:** Every slider now has a `?` badge with plain-English copy for WACC, growth, terminal growth, etc. (`SLIDER_TIPS` constant in `page.tsx`).
+    - **Floating chat FAB + drawer:** Chatbot moved from bottom-of-page to a fixed bottom-right FAB that toggles a slide-up drawer. Unread badge increments while drawer is closed and an assistant reply arrives.
+    - **Dark mode:** 🌙 toggle in topbar, persists via `localStorage["dcf-theme"]`. Applied to `<html data-theme>`.
+    - **Export CSV:** New `exportCSV` writes `dcfResult.projectedFCF` + growth rates + summary as a CSV blob.
+    - **Share link:** New `handleShare` copies `window.location.href` via `navigator.clipboard` with a toast confirmation.
+    - **Scope (option A):** Top-level page only; child components (`SensitivityTable`, `PeerComparisonTable`, `StockPriceChart`, `HistoricalFCFChart`, `Auth`) keep their existing Tailwind classes — dark mode renders inconsistently inside those cards by design.
+
 ### 📍 Next Steps
 1.  **Multi-Scenario Comparison:** Allow users to save and compare Bear, Base, and Bull cases side-by-side.
 2.  **Portfolio Tracking:** Aggregate valuation dashboard for all saved analyses.
@@ -75,4 +89,5 @@ A professional-grade, fully deployed web application for Discounted Cash Flow (D
 - Advanced DCF & PWA Checkpoint: `e793993`
 - Financial & Technical Checkpoint: `aa7d490`
 - Bug Fixes & Hardening Checkpoint: `3b627e6`
-- Code Review Hardening Checkpoint: `94ef228` (Latest)
+- Code Review Hardening Checkpoint: `94ef228`
+- Claude Design UI Redesign Checkpoint: _pending commit_ (Latest)
