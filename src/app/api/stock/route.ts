@@ -3,12 +3,18 @@ import { NextResponse } from 'next/server';
 
 const yahooFinance = new YahooFinance();
 
+const TICKER_RE = /^[A-Z0-9.\-=^]{1,32}$/;
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const tickerParam = searchParams.get('ticker');
+  const raw = searchParams.get('ticker');
 
-  if (!tickerParam) {
+  if (!raw) {
     return NextResponse.json({ error: 'Ticker is required' }, { status: 400 });
+  }
+  const tickerParam = raw.trim().toUpperCase();
+  if (!TICKER_RE.test(tickerParam)) {
+    return NextResponse.json({ error: 'Invalid ticker format' }, { status: 400 });
   }
 
   try {

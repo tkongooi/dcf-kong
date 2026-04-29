@@ -1183,6 +1183,9 @@ export default function Home() {
                   wacc={wacc}
                   growthRate={growthRate}
                   currency={currency}
+                  transitionYears={transitionYears}
+                  totalCash={totalCash}
+                  totalDebt={totalDebt}
                 />
               </div>
             )}

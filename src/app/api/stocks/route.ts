@@ -3,6 +3,9 @@ import { NextResponse } from 'next/server';
 
 const yahooFinance = new YahooFinance();
 
+const TICKER_RE = /^[A-Z0-9.\-=^]{1,32}$/;
+const MAX_TICKERS = 20;
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const tickersStr = searchParams.get('tickers');
@@ -11,7 +14,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Tickers are required' }, { status: 400 });
   }
 
-  const tickers = tickersStr.split(',').map(t => t.trim().toUpperCase());
+  const rawTickers = tickersStr.split(',').map(t => t.trim().toUpperCase()).filter(Boolean);
+  if (rawTickers.length === 0) {
+    return NextResponse.json({ error: 'Tickers are required' }, { status: 400 });
+  }
+  if (rawTickers.length > MAX_TICKERS) {
+    return NextResponse.json({ error: `Too many tickers (max ${MAX_TICKERS})` }, { status: 400 });
+  }
+  const tickers = Array.from(new Set(rawTickers)).filter(t => TICKER_RE.test(t));
+  if (tickers.length === 0) {
+    return NextResponse.json({ error: 'No valid tickers' }, { status: 400 });
+  }
 
   try {
     const settled = await Promise.all(

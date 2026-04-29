@@ -9,6 +9,9 @@ interface SensitivityTableProps {
   wacc: number;
   growthRate: number;
   currency: string;
+  transitionYears: number;
+  totalCash: number;
+  totalDebt: number;
 }
 
 export const SensitivityTable: React.FC<SensitivityTableProps> = React.memo(({
@@ -19,6 +22,9 @@ export const SensitivityTable: React.FC<SensitivityTableProps> = React.memo(({
   wacc,
   growthRate,
   currency,
+  transitionYears,
+  totalCash,
+  totalDebt,
 }) => {
   const waccRange = useMemo(() => [wacc - 2, wacc - 1, wacc, wacc + 1, wacc + 2].filter(v => v > 0), [wacc]);
   const growthRange = useMemo(() => [growthRate - 2, growthRate - 1, growthRate, growthRate + 1, growthRate + 2], [growthRate]);
@@ -26,11 +32,11 @@ export const SensitivityTable: React.FC<SensitivityTableProps> = React.memo(({
   const gridValues = useMemo(() => {
     return growthRange.map((g) =>
       waccRange.map((w) => {
-        const result = calculateDCF(fcf, g, terminalGrowth, w, years, sharesOutstanding);
+        const result = calculateDCF(fcf, g, terminalGrowth, w, years, sharesOutstanding, transitionYears, totalCash, totalDebt);
         return result.valuePerShare;
       })
     );
-  }, [fcf, sharesOutstanding, terminalGrowth, years, waccRange, growthRange]);
+  }, [fcf, sharesOutstanding, terminalGrowth, years, waccRange, growthRange, transitionYears, totalCash, totalDebt]);
 
   return (
     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
@@ -54,7 +60,7 @@ export const SensitivityTable: React.FC<SensitivityTableProps> = React.memo(({
               </td>
               {waccRange.map((w, wIdx) => {
                 const value = gridValues[gIdx][wIdx];
-                const isCurrent = g === growthRate && w === wacc;
+                const isCurrent = Math.abs(g - growthRate) < 1e-6 && Math.abs(w - wacc) < 1e-6;
                 return (
                   <td
                     key={`${g}-${w}`}

@@ -75,6 +75,13 @@ A professional-grade, fully deployed web application for Discounted Cash Flow (D
     - **Share link:** New `handleShare` copies `window.location.href` via `navigator.clipboard` with a toast confirmation.
     - **Scope (option A):** Top-level page only; child components (`SensitivityTable`, `PeerComparisonTable`, `StockPriceChart`, `HistoricalFCFChart`, `Auth`) keep their existing Tailwind classes — dark mode renders inconsistently inside those cards by design.
 
+10. **Code Review Pass — Top 5 Fixes (2026-04-29):**
+    - **Sensitivity table correctness:** `SensitivityTable` now receives `transitionYears`, `totalCash`, `totalDebt` and forwards them to `calculateDCF`. The highlighted "current" cell now matches the headline value when cash/debt are non-zero (was using default 5y transition + zero cash/debt). Cell-match uses `Math.abs(...) < 1e-6` tolerance instead of float `===`.
+    - **Prompt-injection hardening:** `/api/chat` sets `systemInstruction`, wraps every user value in `<user_input>...</user_input>` delimiters, tightens ticker validation to `/^[A-Z0-9.\-=^]{1,32}$/`, and rejects empty/invalid tickers before hitting Gemini. Lazy `genAI` init removes the empty-string fallback. Chat history now coalesces consecutive same-role turns.
+    - **Supabase loud-fail:** `src/lib/supabase.ts` placeholder client replaced with a Proxy that throws a descriptive error on any access when env vars are missing — silent network errors against `placeholder.supabase.co` no longer possible.
+    - **API input validation:** `/api/stock` and `/api/stocks` reject malformed tickers (regex), dedupe, and cap `/api/stocks` to 20 tickers per request.
+    - **DCF unit tests:** Added Vitest (`npm test` / `npm run test:watch`) and `src/lib/dcf.test.ts` with 14 tests covering error paths, two-stage projection, Gordon growth terminal value, equity bridge, edge cases (zero/negative growth, transitionYears=0). All passing.
+
 ### 📍 Next Steps
 1.  **Multi-Scenario Comparison:** Allow users to save and compare Bear, Base, and Bull cases side-by-side.
 2.  **Portfolio Tracking:** Aggregate valuation dashboard for all saved analyses.
@@ -90,4 +97,5 @@ A professional-grade, fully deployed web application for Discounted Cash Flow (D
 - Financial & Technical Checkpoint: `aa7d490`
 - Bug Fixes & Hardening Checkpoint: `3b627e6`
 - Code Review Hardening Checkpoint: `94ef228`
-- Claude Design UI Redesign Checkpoint: `956dcc3` (Latest)
+- Claude Design UI Redesign Checkpoint: `956dcc3`
+- Code Review Pass (Top 5 Fixes) Checkpoint: `pending` (Latest)
