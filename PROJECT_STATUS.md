@@ -106,4 +106,4 @@ A professional-grade, fully deployed web application for Discounted Cash Flow (D
 - Code Review Hardening Checkpoint: `94ef228`
 - Claude Design UI Redesign Checkpoint: `956dcc3`
 - Code Review Pass (Top 5 Fixes) Checkpoint: `a365025`
-- Chat Scratchpad Leak Strip Checkpoint: `<TBD>` (Latest)
+- Chat Scratchpad Leak Strip Checkpoint: `a07a371` (Latest)
