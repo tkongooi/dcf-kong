@@ -82,11 +82,12 @@ A professional-grade, fully deployed web application for Discounted Cash Flow (D
     - **API input validation:** `/api/stock` and `/api/stocks` reject malformed tickers (regex), dedupe, and cap `/api/stocks` to 20 tickers per request.
     - **DCF unit tests:** Added Vitest (`npm test` / `npm run test:watch`) and `src/lib/dcf.test.ts` with 14 tests covering error paths, two-stage projection, Gordon growth terminal value, equity bridge, edge cases (zero/negative growth, transitionYears=0). All passing.
 
-11. **Chat Scratchpad Leak Strip (2026-05-07):**
-    - **Problem:** Gemma (`gemma-4-31b-it`) occasionally prefixed chat replies with a planning preamble — bullet lists describing the user's request, the assistant's role/constraints/goal, and the plan — before the actual answer.
-    - **Prompt-side fix:** Extended `SYSTEM_INSTRUCTION` in `src/app/api/chat/route.ts` with explicit "respond directly, no planning/scratchpad/role-summary preambles, no leading bullets describing user/role/goal/plan."
-    - **Server-side stripper:** New `stripLeakedThoughts(text)` removes a contiguous leading block of bullet/blank lines IFF the block contains tell-tale meta phrases (`user_input`, `Role:`, `Constraint`, `Goal:`, "The user is/wants/asked", "hallucinat", "pivot to", "acknowledge the error"). Conservative — won't trigger on legitimate bullet-list answers.
-    - **Applied to:** free-form `chat` path (line 195) and `commentary` path (line 175). Other types (`peers`, `resolve-ticker`, `all-in-one`, `combined`, `research`) return JSON which downstream code parses; intentionally not stripped to avoid corrupting JSON.
+11. **Chat Reliability Pass — Scratchpad Leak, Error Hints, Model Switch (2026-05-07):**
+    - **Problem A (scratchpad leak):** Gemma (`gemma-4-31b-it`) prefixed chat replies with a planning preamble — analysis of the user's request, role/constraint summaries, and a plan line — before the actual answer.
+    - **First attempt (commit `a07a371`):** `stripLeakedThoughts` heuristically removed a contiguous leading bullet/blank block when meta-phrases were present. Insufficient — leaks that started with prose ("The user is asking…") slipped through unchanged. Code-review pass had flagged this exact shape at confidence 75; treated as runner-up and shipped anyway. Lesson logged as a feedback memory.
+    - **Second attempt (commit `8796d22`):** Replaced with `extractAnswer` — pulls content out of literal `[[ANSWER]]…[[/ANSWER]]` markers; falls back to the last paragraph if the model ignored markers. System instruction split into `SYSTEM_INSTRUCTION_BASE` (role + injection defense, used by JSON paths so their `"Only return JSON"` rule isn't fought by the marker rule) and `SYSTEM_INSTRUCTION_FREEFORM` (BASE + marker requirement, used by `chat` and `commentary`). Deterministic and testable; no more arms race against Gemma's leak shapes.
+    - **Problem B (misleading 500 error):** `src/app/page.tsx` chat catch-block unconditionally appended `". Please ensure GEMINI_API_KEY is set in your environment."` to every error, including transient Google-side 500s where the key was fine. Fixed in `8796d22` with conditional hints: auth signals → API-key hint; `5xx`/`UNAVAILABLE`/`overloaded` → "Gemini side, try again"; otherwise → generic retry.
+    - **Problem C (capacity):** User reported a demand spike on shared `gemma-*` infra causing repeated 500s. Switched the model to `gemini-3.1-flash-lite` (commit `2a10d96`). Gemini 3.x flash-lite has its own provisioned capacity and separated thinking tokens; leak frequency should drop sharply. The `[[ANSWER]]` delimiter extraction stays in place as defense-in-depth.
     - **Default theme:** Confirmed light is the default; `layout.tsx` sets `data-theme="light"`, `page.tsx` initializes dark toggle to `false`. No code change needed; saved as a feedback memory.
 
 ### 📍 Next Steps
@@ -106,4 +107,5 @@ A professional-grade, fully deployed web application for Discounted Cash Flow (D
 - Code Review Hardening Checkpoint: `94ef228`
 - Claude Design UI Redesign Checkpoint: `956dcc3`
 - Code Review Pass (Top 5 Fixes) Checkpoint: `a365025`
-- Chat Scratchpad Leak Strip Checkpoint: `a07a371` (Latest)
+- Chat Scratchpad Leak Strip Checkpoint: `a07a371`
+- Chat Reliability Pass Checkpoint: `2a10d96` (Latest)
