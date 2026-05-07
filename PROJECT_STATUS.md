@@ -82,6 +82,13 @@ A professional-grade, fully deployed web application for Discounted Cash Flow (D
     - **API input validation:** `/api/stock` and `/api/stocks` reject malformed tickers (regex), dedupe, and cap `/api/stocks` to 20 tickers per request.
     - **DCF unit tests:** Added Vitest (`npm test` / `npm run test:watch`) and `src/lib/dcf.test.ts` with 14 tests covering error paths, two-stage projection, Gordon growth terminal value, equity bridge, edge cases (zero/negative growth, transitionYears=0). All passing.
 
+11. **Chat Scratchpad Leak Strip (2026-05-07):**
+    - **Problem:** Gemma (`gemma-4-31b-it`) occasionally prefixed chat replies with a planning preamble — bullet lists describing the user's request, the assistant's role/constraints/goal, and the plan — before the actual answer.
+    - **Prompt-side fix:** Extended `SYSTEM_INSTRUCTION` in `src/app/api/chat/route.ts` with explicit "respond directly, no planning/scratchpad/role-summary preambles, no leading bullets describing user/role/goal/plan."
+    - **Server-side stripper:** New `stripLeakedThoughts(text)` removes a contiguous leading block of bullet/blank lines IFF the block contains tell-tale meta phrases (`user_input`, `Role:`, `Constraint`, `Goal:`, "The user is/wants/asked", "hallucinat", "pivot to", "acknowledge the error"). Conservative — won't trigger on legitimate bullet-list answers.
+    - **Applied to:** free-form `chat` path (line 195) and `commentary` path (line 175). Other types (`peers`, `resolve-ticker`, `all-in-one`, `combined`, `research`) return JSON which downstream code parses; intentionally not stripped to avoid corrupting JSON.
+    - **Default theme:** Confirmed light is the default; `layout.tsx` sets `data-theme="light"`, `page.tsx` initializes dark toggle to `false`. No code change needed; saved as a feedback memory.
+
 ### 📍 Next Steps
 1.  **Multi-Scenario Comparison:** Allow users to save and compare Bear, Base, and Bull cases side-by-side.
 2.  **Portfolio Tracking:** Aggregate valuation dashboard for all saved analyses.
@@ -98,4 +105,5 @@ A professional-grade, fully deployed web application for Discounted Cash Flow (D
 - Bug Fixes & Hardening Checkpoint: `3b627e6`
 - Code Review Hardening Checkpoint: `94ef228`
 - Claude Design UI Redesign Checkpoint: `956dcc3`
-- Code Review Pass (Top 5 Fixes) Checkpoint: `a365025` (Latest)
+- Code Review Pass (Top 5 Fixes) Checkpoint: `a365025`
+- Chat Scratchpad Leak Strip Checkpoint: `<TBD>` (Latest)
