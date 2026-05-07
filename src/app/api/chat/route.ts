@@ -66,7 +66,7 @@ export async function POST(request: Request) {
   try {
     const isFreeForm = type === "commentary" || type === "chat" || !type;
     const model = getGenAI().getGenerativeModel({
-      model: "gemma-4-31b-it",
+      model: "gemini-3.1-flash-lite",
       systemInstruction: isFreeForm ? SYSTEM_INSTRUCTION_FREEFORM : SYSTEM_INSTRUCTION_BASE,
     });
 
