@@ -713,7 +713,14 @@ export default function Home() {
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
-      setMessages(prev => [...prev, { role: "assistant", content: `Error: ${errorMessage}. Please ensure GEMINI_API_KEY is set in your environment.` }]);
+      const isAuthIssue = /API Key not configured|API key not valid|\b401\b|\b403\b/i.test(errorMessage);
+      const isServerIssue = /\b5\d\d\b|Internal error|UNAVAILABLE|overloaded/i.test(errorMessage);
+      const hint = isAuthIssue
+        ? " Please ensure GEMINI_API_KEY is set in your environment."
+        : isServerIssue
+        ? " The AI service is temporarily unavailable (Gemini side). Please try again in a moment."
+        : " Please try again.";
+      setMessages(prev => [...prev, { role: "assistant", content: `Error: ${errorMessage}.${hint}` }]);
     } finally {
       setAiLoading(false);
       setPeersLoading(false);
