@@ -7,7 +7,7 @@ A professional-grade, fully deployed web application for Discounted Cash Flow (D
 - **Frontend:** Next.js 16 (App Router), Tailwind CSS v4, Lucide Icons, Recharts.
 - **Backend:** Next.js Route Handlers, `yahoo-finance2` (Deep Scraper).
 - **Database/Auth:** Supabase (Auth OTP + Postgres Database).
-- **AI Layer:** Google Gemini AI (`gemini-3.1-flash-lite`).
+- **AI Layer:** Google Gemini AI (`gemma-4-31b-it`).
 - **Deployment:** Vercel (Production Ready).
 - **Mobile:** PWA (Progressive Web App) with standalone window support.
 
@@ -82,6 +82,10 @@ A professional-grade, fully deployed web application for Discounted Cash Flow (D
     - **API input validation:** `/api/stock` and `/api/stocks` reject malformed tickers (regex), dedupe, and cap `/api/stocks` to 20 tickers per request.
     - **DCF unit tests:** Added Vitest (`npm test` / `npm run test:watch`) and `src/lib/dcf.test.ts` with 14 tests covering error paths, two-stage projection, Gordon growth terminal value, equity bridge, edge cases (zero/negative growth, transitionYears=0). All passing.
 
+12. **Model Switch to gemma-4-31b-it (2026-05-12):**
+    - Switched `/api/chat` model from `gemini-3.1-flash-lite` back to `gemma-4-31b-it` (`src/app/api/chat/route.ts:69`). Reason: `gemini-3.1-flash-lite` is being discontinued; `gemma-4-31b-it` is the target model going forward.
+    - The `[[ANSWER]]` delimiter extraction and dual system-instruction pattern from pass 11 remain in place as defense-in-depth against scratchpad leaks.
+
 11. **Chat Reliability Pass — Scratchpad Leak, Error Hints, Model Switch (2026-05-07):**
     - **Problem A (scratchpad leak):** Gemma (`gemma-4-31b-it`) prefixed chat replies with a planning preamble — analysis of the user's request, role/constraint summaries, and a plan line — before the actual answer.
     - **First attempt (commit `a07a371`):** `stripLeakedThoughts` heuristically removed a contiguous leading bullet/blank block when meta-phrases were present. Insufficient — leaks that started with prose ("The user is asking…") slipped through unchanged. Code-review pass had flagged this exact shape at confidence 75; treated as runner-up and shipped anyway. Lesson logged as a feedback memory.
@@ -108,4 +112,5 @@ A professional-grade, fully deployed web application for Discounted Cash Flow (D
 - Claude Design UI Redesign Checkpoint: `956dcc3`
 - Code Review Pass (Top 5 Fixes) Checkpoint: `a365025`
 - Chat Scratchpad Leak Strip Checkpoint: `a07a371`
-- Chat Reliability Pass Checkpoint: `2a10d96` (Latest)
+- Chat Reliability Pass Checkpoint: `2a10d96`
+- Model Switch to gemma-4-31b-it Checkpoint: (Latest)
